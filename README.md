@@ -5,7 +5,6 @@
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
 [![Version](https://img.shields.io/badge/version-1.5.1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
-[![Colombia](https://img.shields.io/badge/pack-Colombia 🇨🇴-yellow)](README.md#pack-colombia-)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
 instalaciones eléctricas, muebles, cocinas y más como objetos **paramétricos
@@ -71,7 +70,7 @@ en medidas comerciales colombianas.
 
 **Opción C — Desarrollo**
 ```bash
-git clone https://github.com/TU-USUARIO/archiforge.git
+git clone https://github.com/luan920530-commits//archiforge.git
 ```
 Luego enlace o copie la carpeta a su ruta de addons. Con el addon cargado,
 pulse `F8` en Blender para recargar cambios sin reiniciar.
