@@ -1,0 +1,1766 @@
+# -*- coding: utf-8 -*-
+
+# ╔══════════════════════════════════════════════════════════╗
+# ║         ARCHIFORGE — af_floor.py                        ║
+# ║         Patrones de Piso Paramétricos Blender 3.3 LTS   ║
+# ║         GPL v3 — ArchiForge Devs                        ║
+# ╚══════════════════════════════════════════════════════════╝
+
+# <pep8 compliant>
+
+# ════════════════════════════════════════════════════════════
+#  ¿QUÉ HACE ESTE MÓDULO?
+#
+#  Genera patrones de piso / revestimiento paramétricos:
+#
+#  Patrones disponibles:
+#  - REGULAR      : Baldosa cuadrada / rectangular alineada
+#  - OFFSET       : Baldosa offset (brick pattern)
+#  - HERRINGBONE  : Espiga / chevron (45° y 90°)
+#  - PARQUET      : Parquet de madera (bloques / versalles)
+#  - DIAGONAL     : Diagonal a 45°
+#  - HEXAGONAL    : Baldosa hexagonal
+#  - BASKET_WEAVE : Entrelazado (cesta)
+#  - RANDOM       : Tamaños aleatorios (large format)
+#  - COBBLESTONE  : Adoquín irregular
+#  - WOOD_PLANK   : Tablones de madera corridos
+#
+#  Características:
+#  - Dimensiones globales configurables
+#  - Junta (grout) entre piezas
+#  - Espesor y bisel de cada pieza
+#  - Borde perimetral (border trim)
+#  - Generación desde curva o contorno manual
+#  - Offset del patrón (X/Y)
+#  - Rotación del patrón
+#  - Múltiples zonas de material
+# ════════════════════════════════════════════════════════════
+
+import bpy
+import bmesh
+import math
+import random
+
+from mathutils import Vector, Matrix
+from bpy.types import (
+    PropertyGroup,
+    Operator,
+    Panel,
+)
+from bpy.props import (
+    StringProperty,
+    BoolProperty,
+    IntProperty,
+    FloatProperty,
+    EnumProperty,
+    CollectionProperty,
+    PointerProperty,
+)
+
+from . import af_material
+
+
+# ════════════════════════════════════════════════════════════
+#  CONSTANTES
+# ════════════════════════════════════════════════════════════
+AF_FLOOR_PROP = "archiforge_floor"
+
+AF_FLOOR_PATTERNS = [
+    ('REGULAR',      "Regular",       "Aligned square/rect tiles",       'MESH_GRID',     0),
+    ('OFFSET',       "Offset",        "Brick / offset bond pattern",     'MESH_PLANE',    1),
+    ('HERRINGBONE',  "Herringbone",   "Herringbone / espiga pattern",    'DRIVER_ROTATIONAL_DIFFERENCE', 2),
+    ('PARQUET',      "Parquet",       "Wood parquet blocks",             'MESH_CUBE',     3),
+    ('DIAGONAL',     "Diagonal",      "Tiles rotated 45°",               'ORIENTATION_GIMBAL', 4),
+    ('HEXAGONAL',    "Hexagonal",     "Hexagonal tile pattern",          'MESH_CIRCLE',   5),
+    ('BASKET_WEAVE', "Basket Weave",  "Interlocked basket weave",        'MOD_LATTICE',   6),
+    ('RANDOM',       "Random",        "Random large format tiles",       'RNDCURVE',      7),
+    ('COBBLESTONE',  "Cobblestone",   "Irregular cobblestone pattern",   'MESH_UVSPHERE', 8),
+    ('WOOD_PLANK',   "Wood Planks",   "Continuous wood planks",          'MESH_PLANE',    9),
+]
+
+AF_TILE_SHAPES = [
+    ('SQUARE',  "Square",  "Square tiles"),
+    ('RECT',    "Rect",    "Rectangular tiles"),
+    ('CUSTOM',  "Custom",  "Custom width/height ratio"),
+]
+
+AF_BORDER_STYLES = [
+    ('NONE',   "None",   "No border"),
+    ('SINGLE', "Single", "Single row border"),
+    ('DOUBLE', "Double", "Double row border"),
+    ('PICTURE',"Picture Frame", "Picture frame border"),
+]
+
+AF_GROUT_STYLES = [
+    ('FLAT',   "Flat",   "Flat flush grout"),
+    ('RAISED', "Raised", "Slightly raised grout lines"),
+    ('RECESSED',"Recessed","Recessed / concave grout"),
+]
+
+
+# ════════════════════════════════════════════════════════════
+#  PROPERTYGROUP
+# ════════════════════════════════════════════════════════════
+class AF_FloorProperties(PropertyGroup):
+
+    is_af_floor : BoolProperty(
+        name="Is ArchiForge Floor", default=True, options={'HIDDEN'},
+    )
+    object_name : StringProperty(
+        name="Object Name", default="", options={'HIDDEN'},
+    )
+
+    # ── Patrón ───────────────────────────────────────────────
+    pattern : EnumProperty(
+        name    = "Pattern",
+        items   = AF_FLOOR_PATTERNS,
+        default = 'REGULAR',
+        update  = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Dimensiones del área ──────────────────────────────────
+    width : FloatProperty(
+        name        = "Width (X)",
+        description = "Total floor width",
+        default     = 4.0,
+        min         = 0.10,
+        max         = 200.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    depth : FloatProperty(
+        name        = "Depth (Y)",
+        description = "Total floor depth",
+        default     = 3.0,
+        min         = 0.10,
+        max         = 200.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Dimensiones de la pieza ────────────────────────────────
+    tile_width : FloatProperty(
+        name        = "Tile Width",
+        description = "Width of each tile/plank",
+        default     = 0.60,
+        min         = 0.02,
+        max         = 5.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    tile_depth : FloatProperty(
+        name        = "Tile Depth",
+        description = "Depth of each tile/plank",
+        default     = 0.60,
+        min         = 0.02,
+        max         = 5.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    tile_thickness : FloatProperty(
+        name        = "Tile Thickness",
+        description = "Thickness of each tile",
+        default     = 0.010,
+        min         = 0.002,
+        max         = 0.10,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Junta (Grout) ─────────────────────────────────────────
+    grout_width : FloatProperty(
+        name        = "Grout Width",
+        description = "Width of grout joint between tiles",
+        default     = 0.004,
+        min         = 0.0,
+        max         = 0.05,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    grout_depth : FloatProperty(
+        name        = "Grout Depth",
+        description = "Depth of grout joint (recessed from tile surface)",
+        default     = 0.003,
+        min         = 0.0,
+        max         = 0.02,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    grout_style : EnumProperty(
+        name    = "Grout Style",
+        items   = AF_GROUT_STYLES,
+        default = 'RECESSED',
+        update  = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Bisel del borde ───────────────────────────────────────
+    bevel_size : FloatProperty(
+        name        = "Tile Bevel",
+        description = "Chamfer on top edge of each tile",
+        default     = 0.001,
+        min         = 0.0,
+        max         = 0.01,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Offsets del patrón ────────────────────────────────────
+    offset_x : FloatProperty(
+        name        = "Offset X",
+        description = "Horizontal shift of the whole pattern",
+        default     = 0.0,
+        min         = -5.0,
+        max         = 5.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    offset_y : FloatProperty(
+        name        = "Offset Y",
+        description = "Vertical shift of the whole pattern",
+        default     = 0.0,
+        min         = -5.0,
+        max         = 5.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    offset_row : FloatProperty(
+        name        = "Row Offset",
+        description = "Offset fraction per row (OFFSET / WOOD_PLANK)",
+        default     = 0.5,
+        min         = 0.0,
+        max         = 1.0,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Rotación del patrón ───────────────────────────────────
+    pattern_rotation : FloatProperty(
+        name        = "Pattern Rotation",
+        description = "Overall rotation of the floor pattern",
+        default     = 0.0,
+        min         = -math.pi,
+        max         = math.pi,
+        subtype     = 'ANGLE',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Herringbone específico ────────────────────────────────
+    herringbone_angle : FloatProperty(
+        name        = "Herringbone Angle",
+        description = "Angle of herringbone pattern (45 or 90)",
+        default     = math.radians(45),
+        min         = math.radians(30),
+        max         = math.radians(90),
+        subtype     = 'ANGLE',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Parquet específico ────────────────────────────────────
+    parquet_blocks : IntProperty(
+        name        = "Blocks per Cell",
+        description = "Number of planks per parquet cell",
+        default     = 3,
+        min         = 2,
+        max         = 8,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    parquet_style : EnumProperty(
+        name    = "Parquet Style",
+        items   = [
+            ('BLOCK',     "Block",     "Simple block parquet"),
+            ('VERSAILLES',"Versailles","Versailles / Versalles pattern"),
+            ('HERRING',   "Herring",   "Herringbone parquet"),
+        ],
+        default = 'BLOCK',
+        update  = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Wood Plank específico ─────────────────────────────────
+    plank_width : FloatProperty(
+        name        = "Plank Width",
+        description = "Width of each wood plank",
+        default     = 0.12,
+        min         = 0.03,
+        max         = 0.50,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    plank_length_min : FloatProperty(
+        name        = "Min Length",
+        description = "Minimum plank length",
+        default     = 0.60,
+        min         = 0.10,
+        max         = 5.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    plank_length_max : FloatProperty(
+        name        = "Max Length",
+        description = "Maximum plank length",
+        default     = 2.40,
+        min         = 0.20,
+        max         = 10.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    plank_random_seed : IntProperty(
+        name        = "Random Seed",
+        description = "Seed for random plank layout",
+        default     = 42,
+        min         = 0,
+        max         = 9999,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Hexagonal específico ──────────────────────────────────
+    hex_size : FloatProperty(
+        name        = "Hex Size",
+        description = "Size (circumradius) of each hexagon",
+        default     = 0.15,
+        min         = 0.02,
+        max         = 2.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    hex_flat_top : BoolProperty(
+        name        = "Flat Top",
+        description = "Flat-top hexagons vs pointy-top",
+        default     = True,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Cobblestone específico ────────────────────────────────
+    cobble_seed : IntProperty(
+        name="Seed", default=1, min=0, max=9999,
+        update=lambda s, c: af_floor_update(s, c),
+    )
+    cobble_size_min : FloatProperty(
+        name="Min Size", default=0.08, min=0.02, unit='LENGTH',
+        update=lambda s, c: af_floor_update(s, c),
+    )
+    cobble_size_max : FloatProperty(
+        name="Max Size", default=0.20, min=0.04, unit='LENGTH',
+        update=lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Borde / Border ────────────────────────────────────────
+    border_enable : BoolProperty(
+        name        = "Border",
+        description = "Add a perimeter border strip",
+        default     = False,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    border_style : EnumProperty(
+        name    = "Border Style",
+        items   = AF_BORDER_STYLES,
+        default = 'SINGLE',
+        update  = lambda s, c: af_floor_update(s, c),
+    )
+    border_width : FloatProperty(
+        name        = "Border Width",
+        description = "Width of the border strip",
+        default     = 0.10,
+        min         = 0.02,
+        max         = 1.0,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    border_thickness : FloatProperty(
+        name        = "Border Thickness",
+        description = "Thickness of border tiles",
+        default     = 0.010,
+        min         = 0.002,
+        max         = 0.10,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Base (losa base debajo del patrón) ────────────────────
+    base_enable : BoolProperty(
+        name        = "Base Slab",
+        description = "Generate base slab under the tile pattern",
+        default     = True,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+    base_thickness : FloatProperty(
+        name        = "Base Thickness",
+        description = "Thickness of base slab",
+        default     = 0.05,
+        min         = 0.01,
+        max         = 0.50,
+        unit        = 'LENGTH',
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Origen ────────────────────────────────────────────────
+    origin_center : BoolProperty(
+        name        = "Center Origin",
+        description = "Center the floor pattern on the origin",
+        default     = False,
+        update      = lambda s, c: af_floor_update(s, c),
+    )
+
+    # ── Material slots ────────────────────────────────────────
+    mat_tile    : IntProperty(name="Tile Material",    default=0, min=0)
+    mat_grout   : IntProperty(name="Grout Material",   default=1, min=0)
+    mat_border  : IntProperty(name="Border Material",  default=2, min=0)
+    mat_base    : IntProperty(name="Base Material",    default=3, min=0)
+    mat_tile_b  : IntProperty(name="Tile B Material",  default=4, min=0)
+
+
+# ════════════════════════════════════════════════════════════
+#  GENERADOR
+# ════════════════════════════════════════════════════════════
+class AF_FloorGenerator:
+    """
+    Motor de generación de patrones de piso.
+    Sistema de coordenadas:
+      X = ancho
+      Y = profundidad
+      Z = espesor (hacia arriba)
+    Origen en (0,0,0) o centrado según origin_center.
+    """
+
+    def __init__(self, props):
+        self.props = props
+        self.bm    = bmesh.new()
+        self._mat  = self.bm.faces.layers.int.new("material_index")
+        p = props
+        if p.origin_center:
+            self.ox = -p.width * 0.5
+            self.oy = -p.depth * 0.5
+        else:
+            self.ox = 0.0
+            self.oy = 0.0
+
+    # ────────────────────────────────────────────────────────
+    #  UTILIDADES
+    # ────────────────────────────────────────────────────────
+    def _tile(self, x0, y0, tw, td, thick, mi=0, bevel=0.0):
+        """
+        Genera una baldosa/pieza en la posición (x0,y0)
+        con dimensiones tw×td y espesor thick.
+        Si bevel > 0, aplica un bisel en los bordes superiores.
+        """
+        bm  = self.bm
+        mat = self._mat
+        ox  = self.ox
+        oy  = self.oy
+
+        x0 += ox
+        y0 += oy
+        x1  = x0 + tw
+        y1  = y0 + td
+        z0  = 0.0
+        z1  = thick
+
+        if tw < 0.001 or td < 0.001 or thick < 0.001:
+            return
+
+        if bevel > 0.001 and bevel < tw * 0.4 and bevel < td * 0.4:
+            # — Cara superior con bisel (8 vértices en la cara top) —
+            bv = bevel
+            top_pts = [
+                Vector((x0 + bv, y0,      z1)),
+                Vector((x1 - bv, y0,      z1)),
+                Vector((x1,      y0 + bv, z1)),
+                Vector((x1,      y1 - bv, z1)),
+                Vector((x1 - bv, y1,      z1)),
+                Vector((x0 + bv, y1,      z1)),
+                Vector((x0,      y1 - bv, z1)),
+                Vector((x0,      y0 + bv, z1)),
+            ]
+            bot_pts = [
+                Vector((x0, y0, z0)),
+                Vector((x1, y0, z0)),
+                Vector((x1, y1, z0)),
+                Vector((x0, y1, z0)),
+            ]
+            vt = [bm.verts.new(p) for p in top_pts]
+            vb = [bm.verts.new(p) for p in bot_pts]
+            bm.verts.ensure_lookup_table()
+
+            # Cara top
+            try:
+                f = bm.faces.new(vt)
+                f[mat] = mi
+            except Exception:
+                pass
+
+            # Cara bottom
+            try:
+                f = bm.faces.new(list(reversed(vb)))
+                f[mat] = mi
+            except Exception:
+                pass
+
+            # Caras laterales + bisel
+            # Frente (-Y): vb[0]→vb[1] → vt[1]→vt[0]
+            side_pairs = [
+                ([vb[0], vb[1]], [vt[1], vt[0]]),
+                ([vb[1], vb[2]], [vt[4], vt[3], vt[2], vt[1]]),
+                ([vb[2], vb[3]], [vt[5], vt[4]]),
+                ([vb[3], vb[0]], [vt[0], vt[7], vt[6], vt[5]]),
+            ]
+            for bot_side, top_side in side_pairs:
+                try:
+                    f = bm.faces.new(
+                        bot_side + list(reversed(top_side))
+                    )
+                    f[mat] = mi
+                except Exception:
+                    pass
+
+        else:
+            # — Prisma simple sin bisel —
+            verts = [
+                bm.verts.new(Vector((x0, y0, z0))),
+                bm.verts.new(Vector((x1, y0, z0))),
+                bm.verts.new(Vector((x1, y1, z0))),
+                bm.verts.new(Vector((x0, y1, z0))),
+                bm.verts.new(Vector((x0, y0, z1))),
+                bm.verts.new(Vector((x1, y0, z1))),
+                bm.verts.new(Vector((x1, y1, z1))),
+                bm.verts.new(Vector((x0, y1, z1))),
+            ]
+            bm.verts.ensure_lookup_table()
+            for fi in [
+                (0,1,5,4),(2,3,7,6),(0,3,2,1),
+                (4,5,6,7),(0,4,7,3),(1,2,6,5),
+            ]:
+                f = bm.faces.new([verts[i] for i in fi])
+                f[mat] = mi
+
+    def _tile_rotated(self, cx, cy, tw, td, thick,
+                       angle, mi=0, bevel=0.0):
+        """
+        Genera una baldosa rotada angle radianes alrededor
+        de su centro (cx, cy).
+        """
+        bm   = self.bm
+        mat  = self._mat
+        ox   = self.ox
+        oy   = self.oy
+        cosa = math.cos(angle)
+        sina = math.sin(angle)
+        z0   = 0.0
+        z1   = thick
+
+        hw = tw * 0.5
+        hd = td * 0.5
+
+        local = [
+            Vector((-hw, -hd)),
+            Vector(( hw, -hd)),
+            Vector(( hw,  hd)),
+            Vector((-hw,  hd)),
+        ]
+
+        def rot(v):
+            return Vector((
+                cx + ox + v.x * cosa - v.y * sina,
+                cy + oy + v.x * sina + v.y * cosa,
+            ))
+
+        corners = [rot(v) for v in local]
+
+        vb = [bm.verts.new(Vector((c.x, c.y, z0))) for c in corners]
+        vt = [bm.verts.new(Vector((c.x, c.y, z1))) for c in corners]
+        bm.verts.ensure_lookup_table()
+
+        try:
+            bm.faces.new(list(reversed(vb)))[mat] = mi
+            bm.faces.new(vt)[mat] = mi
+        except Exception:
+            pass
+
+        for i in range(4):
+            j = (i+1) % 4
+            try:
+                f = bm.faces.new([vb[i], vb[j], vt[j], vt[i]])
+                f[mat] = mi
+            except Exception:
+                pass
+
+    def _hex_tile(self, cx, cy, r, thick, flat_top, mi=0):
+        """
+        Genera una baldosa hexagonal.
+        flat_top=True → aristas horizontales arriba/abajo
+        flat_top=False → vértice en la parte superior
+        """
+        bm  = self.bm
+        mat = self._mat
+        ox  = self.ox
+        oy  = self.oy
+        z0  = 0.0
+        z1  = thick
+        segs = 6
+
+        base_angle = 0.0 if flat_top else math.radians(30)
+
+        pts = []
+        for i in range(segs):
+            a = base_angle + i * (2 * math.pi / segs)
+            pts.append(Vector((
+                cx + ox + r * math.cos(a),
+                cy + oy + r * math.sin(a),
+            )))
+
+        vb = [bm.verts.new(Vector((p.x, p.y, z0))) for p in pts]
+        vt = [bm.verts.new(Vector((p.x, p.y, z1))) for p in pts]
+        bm.verts.ensure_lookup_table()
+
+        try:
+            bm.faces.new(list(reversed(vb)))[mat] = mi
+            bm.faces.new(vt)[mat] = mi
+        except Exception:
+            pass
+
+        for i in range(segs):
+            j = (i+1) % segs
+            try:
+                f = bm.faces.new([vb[i], vb[j], vt[j], vt[i]])
+                f[mat] = mi
+            except Exception:
+                pass
+
+    def _grout_line_h(self, x0, x1, y, gw, gd, mi):
+        """Línea de junta horizontal."""
+        if gw < 0.0001:
+            return
+        p = self.props
+        self._tile(
+            x0 - self.ox, y - gw * 0.5 - self.oy,
+            x1 - x0, gw,
+            gd if gd > 0.001 else p.tile_thickness,
+            mi
+        )
+
+    def _grout_line_v(self, y0, y1, x, gw, gd, mi):
+        """Línea de junta vertical."""
+        if gw < 0.0001:
+            return
+        p = self.props
+        self._tile(
+            x - gw * 0.5 - self.ox, y0 - self.oy,
+            gw, y1 - y0,
+            gd if gd > 0.001 else p.tile_thickness,
+            mi
+        )
+
+    # ────────────────────────────────────────────────────────
+    #  LOSA BASE
+    # ────────────────────────────────────────────────────────
+    def _build_base(self):
+        """Genera la losa base debajo del patrón."""
+        p  = self.props
+        if not p.base_enable:
+            return
+        bt = p.base_thickness
+        w  = p.width
+        d  = p.depth
+        self._tile(0, 0, w, d, bt, p.mat_base)
+
+    # ────────────────────────────────────────────────────────
+    #  BORDE PERIMETRAL
+    # ────────────────────────────────────────────────────────
+    def _build_border(self):
+        """Genera el borde perimetral del piso."""
+        p  = self.props
+        if not p.border_enable:
+            return
+
+        bw = p.border_width
+        bt = p.border_thickness
+        w  = p.width
+        d  = p.depth
+        mi = p.mat_border
+        bev = p.bevel_size
+
+        # — Borde frontal (Y=0) —
+        self._tile(0, 0, w, bw, bt, mi, bev)
+        # — Borde trasero —
+        self._tile(0, d - bw, w, bw, bt, mi, bev)
+        # — Borde izquierdo —
+        self._tile(0, bw, bw, d - bw * 2, bt, mi, bev)
+        # — Borde derecho —
+        self._tile(w - bw, bw, bw, d - bw * 2, bt, mi, bev)
+
+        if p.border_style == 'DOUBLE':
+            bw2 = bw * 0.5
+            self._tile(bw, bw, w - bw*2, bw2, bt, mi, bev)
+            self._tile(bw, d - bw - bw2, w - bw*2, bw2, bt, mi, bev)
+            self._tile(bw, bw + bw2, bw2, d - bw*2 - bw2*2, bt, mi, bev)
+            self._tile(w - bw - bw2, bw + bw2, bw2, d - bw*2 - bw2*2, bt, mi, bev)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: REGULAR
+    # ────────────────────────────────────────────────────────
+    def _build_regular(self):
+        """
+        Baldosa cuadrada/rectangular alineada.
+        Filas y columnas perfectamente alineadas.
+        """
+        p   = self.props
+        tw  = p.tile_width
+        td  = p.tile_depth
+        tt  = p.tile_thickness
+        gw  = p.grout_width
+        bev = p.bevel_size
+        mi  = p.mat_tile
+        mi_g = p.mat_grout
+        ox  = p.offset_x
+        oy  = p.offset_y
+        w   = p.width
+        d   = p.depth
+
+        # Área interior (dejando espacio para el borde si aplica)
+        bw   = p.border_width if p.border_enable else 0.0
+        x_s  = bw + ox
+        y_s  = bw + oy
+        x_e  = w - bw
+        y_e  = d - bw
+
+        step_x = tw + gw
+        step_y = td + gw
+
+        n_cols = max(1, int((x_e - x_s) / step_x) + 2)
+        n_rows = max(1, int((y_e - y_s) / step_y) + 2)
+
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x0 = x_s + col * step_x
+                y0 = y_s + row * step_y
+
+                # Recortar al área
+                if x0 >= x_e or y0 >= y_e:
+                    continue
+                tw_clip = min(tw, x_e - x0)
+                td_clip = min(td, y_e - y0)
+                if tw_clip < 0.005 or td_clip < 0.005:
+                    continue
+
+                self._tile(x0, y0, tw_clip, td_clip, tt, mi, bev)
+
+        # — Juntas —
+        if gw > 0.0001:
+            # Horizontales
+            for row in range(n_rows):
+                y_grout = y_s + (row + 1) * step_y - gw
+                if y_s <= y_grout <= y_e:
+                    self._tile(
+                        bw, y_grout, w - bw*2, gw,
+                        max(tt - p.grout_depth, 0.001),
+                        mi_g
+                    )
+            # Verticales
+            for col in range(n_cols):
+                x_grout = x_s + (col + 1) * step_x - gw
+                if x_s <= x_grout <= x_e:
+                    self._tile(
+                        x_grout, bw, gw, d - bw*2,
+                        max(tt - p.grout_depth, 0.001),
+                        mi_g
+                    )
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: OFFSET (Brick Bond)
+    # ────────────────────────────────────────────────────────
+    def _build_offset(self):
+        """
+        Patrón de junta corrida (brick bond).
+        Las filas alternas están desplazadas por offset_row.
+        """
+        p    = self.props
+        tw   = p.tile_width
+        td   = p.tile_depth
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_g = p.mat_grout
+        off  = p.offset_row
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+
+        x_s  = bw + ox
+        y_s  = bw + oy
+        x_e  = w - bw
+        y_e  = d - bw
+
+        step_x = tw + gw
+        step_y = td + gw
+        n_cols = max(1, int((x_e - x_s) / step_x) + 2)
+        n_rows = max(1, int((y_e - y_s) / step_y) + 2)
+
+        for row in range(n_rows):
+            row_off = (off * step_x) if row % 2 == 1 else 0.0
+            for col in range(n_cols):
+                x0 = x_s + col * step_x - row_off
+                y0 = y_s + row * step_y
+                if x0 + tw < x_s or x0 >= x_e:
+                    continue
+                if y0 >= y_e:
+                    continue
+                x0_c = max(x0, x_s)
+                tw_c = min(x0 + tw, x_e) - x0_c
+                td_c = min(td, y_e - y0)
+                if tw_c < 0.005 or td_c < 0.005:
+                    continue
+                self._tile(x0_c, y0, tw_c, td_c, tt, mi, bev)
+
+        # Juntas
+        if gw > 0.0001:
+            for row in range(n_rows):
+                yg = y_s + (row + 1) * step_y - gw
+                if y_s <= yg < y_e:
+                    self._tile(bw, yg, w - bw*2, gw,
+                               max(tt - p.grout_depth, 0.001), mi_g)
+            for col in range(n_cols + 1):
+                for row in range(n_rows):
+                    row_off = (off * step_x) if row % 2 == 1 else 0.0
+                    xg = x_s + col * step_x - row_off - gw
+                    y0 = y_s + row * step_y
+                    y1 = min(y0 + td, y_e)
+                    if x_s <= xg < x_e and y0 < y_e:
+                        self._tile(xg, y0, gw, y1 - y0,
+                                   max(tt - p.grout_depth, 0.001), mi_g)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: HERRINGBONE
+    # ────────────────────────────────────────────────────────
+    def _build_herringbone(self):
+        """
+        Patrón en espiga / herringbone.
+        Las piezas se alternan a ±angle° respecto al eje X.
+        """
+        p    = self.props
+        tw   = p.tile_width
+        td   = p.tile_depth
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        a    = p.herringbone_angle
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+        ox   = p.offset_x
+        oy   = p.offset_y
+
+        # — Calcula el paso de la celda de espiga —
+        # Celda unitaria del herringbone: 2 piezas forman un módulo
+        cell_w = tw * math.cos(a) + td * math.sin(a)
+        cell_d = tw * math.sin(a) + td * math.cos(a)
+
+        n_cols = max(1, int((w - bw*2) / cell_w) + 3)
+        n_rows = max(1, int((d - bw*2) / cell_d) + 3)
+
+        for row in range(-1, n_rows + 1):
+            for col in range(-1, n_cols + 1):
+                # Pieza A (ángulo positivo)
+                cx_a = bw + ox + col * cell_w + tw * 0.5 * math.cos(a)
+                cy_a = bw + oy + row * cell_d + tw * 0.5 * math.sin(a)
+                self._tile_rotated(
+                    cx_a, cy_a, tw, td, tt, a, mi, bev
+                )
+                # Pieza B (ángulo negativo / perpendicular)
+                cx_b = bw + ox + col * cell_w + td * 0.5 * math.sin(a) + tw * math.cos(a)
+                cy_b = bw + oy + row * cell_d + td * 0.5 * math.cos(a) - tw * math.sin(a) + td
+                self._tile_rotated(
+                    cx_b, cy_b, tw, td, tt, -a, mi_b, bev
+                )
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: PARQUET
+    # ────────────────────────────────────────────────────────
+    def _build_parquet(self):
+        """
+        Parquet de madera en bloques.
+        Cada celda contiene n tablones perpendiculares.
+        Las celdas alternas rotan 90°.
+        """
+        p    = self.props
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        nb   = p.parquet_blocks
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+
+        # La celda del parquet es cuadrada
+        plank_w = p.tile_width  / nb
+        plank_d = p.tile_depth
+        cell    = p.tile_depth    # celda cuadrada
+
+        step_x = cell + gw
+        step_y = cell + gw
+
+        n_cols = max(1, int((w - bw*2 + ox) / step_x) + 2)
+        n_rows = max(1, int((d - bw*2 + oy) / step_y) + 2)
+
+        for row in range(n_rows):
+            for col in range(n_cols):
+                x_cell = bw + ox + col * step_x
+                y_cell = bw + oy + row * step_y
+                rotate = (row + col) % 2 == 1
+
+                for i in range(nb):
+                    if rotate:
+                        # Tablones horizontales (Y)
+                        x0 = x_cell
+                        y0 = y_cell + i * (plank_w + gw * 0.5)
+                        pw_t = plank_d
+                        pd_t = plank_w
+                    else:
+                        # Tablones verticales (X)
+                        x0 = x_cell + i * (plank_w + gw * 0.5)
+                        y0 = y_cell
+                        pw_t = plank_w
+                        pd_t = plank_d
+
+                    mat_idx = mi if not rotate else mi_b
+                    self._tile(x0, y0, pw_t, pd_t, tt, mat_idx, bev)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: DIAGONAL
+    # ────────────────────────────────────────────────────────
+    def _build_diagonal(self):
+        """
+        Baldosas rotadas 45°.
+        La malla de centros se rota para llenar el área.
+        """
+        p    = self.props
+        tw   = p.tile_width
+        td   = p.tile_depth
+        tt   = p.tile_thickness
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        gw   = p.grout_width
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+        ox   = p.offset_x
+        oy   = p.offset_y
+
+        a    = math.radians(45)
+        step = (tw + gw) * math.cos(a)
+
+        n = max(1, int(max(w, d) / step) + 4)
+
+        for row in range(-n, n*2):
+            for col in range(-n, n*2):
+                cx = bw + ox + col * step * 2
+                cy = bw + oy + row * step * 2
+
+                # Alternar color
+                mat_idx = mi if (row + col) % 2 == 0 else mi_b
+
+                self._tile_rotated(cx, cy, tw, td, tt, a, mat_idx, bev)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: HEXAGONAL
+    # ────────────────────────────────────────────────────────
+    def _build_hexagonal(self):
+        """
+        Baldosa hexagonal en trama offset.
+        """
+        p   = self.props
+        r   = p.hex_size
+        tt  = p.tile_thickness
+        gw  = p.grout_width
+        mi  = p.mat_tile
+        ft  = p.hex_flat_top
+        w   = p.width
+        d   = p.depth
+        bw  = p.border_width if p.border_enable else 0.0
+        ox  = p.offset_x
+        oy  = p.offset_y
+
+        # Paso entre hexágonos
+        if ft:
+            step_x = r * math.sqrt(3) + gw
+            step_y = r * 1.5 + gw * 0.5
+        else:
+            step_x = r * 1.5 + gw * 0.5
+            step_y = r * math.sqrt(3) + gw
+
+        n_cols = max(1, int((w - bw*2) / step_x) + 3)
+        n_rows = max(1, int((d - bw*2) / step_y) + 3)
+
+        for row in range(-1, n_rows + 1):
+            for col in range(-1, n_cols + 1):
+                if ft:
+                    cx = bw + ox + col * step_x + (step_x * 0.5 if row % 2 == 1 else 0.0)
+                    cy = bw + oy + row * step_y
+                else:
+                    cx = bw + ox + col * step_x
+                    cy = bw + oy + row * step_y + (step_y * 0.5 if col % 2 == 1 else 0.0)
+
+                self._hex_tile(cx, cy, r - gw * 0.5, tt, ft, mi)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: BASKET WEAVE
+    # ────────────────────────────────────────────────────────
+    def _build_basket_weave(self):
+        """
+        Patrón de cesta entrelazada (basket weave).
+        2 tablones horizontales + 2 tablones verticales por celda.
+        """
+        p    = self.props
+        tw   = p.tile_width
+        td   = p.tile_depth
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+
+        # Celda = 2×tw + gw × 2×td + gw
+        cell_w = 2 * tw + gw
+        cell_d = 2 * td + gw
+
+        n_cols = max(1, int((w - bw*2) / cell_w) + 2)
+        n_rows = max(1, int((d - bw*2) / cell_d) + 2)
+
+        for row in range(n_rows):
+            for col in range(n_cols):
+                cx = bw + ox + col * cell_w
+                cy = bw + oy + row * cell_d
+
+                # Horizontal pair (arriba de la celda)
+                self._tile(cx,        cy,          tw, td, tt, mi, bev)
+                self._tile(cx + tw + gw, cy,       tw, td, tt, mi, bev)
+                # Vertical pair (debajo de la celda)
+                self._tile(cx,        cy + td + gw, td, tw, tt, mi_b, bev)
+                self._tile(cx + tw + gw, cy + td + gw, td, tw, tt, mi_b, bev)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: WOOD PLANK
+    # ────────────────────────────────────────────────────────
+    def _build_wood_plank(self):
+        """
+        Tablones de madera corridos con juntas aleatorias.
+        Las filas van en la dirección Y.
+        Los tablones se cortan aleatoriamente en X.
+        """
+        p    = self.props
+        pw   = p.plank_width
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+        lmin = p.plank_length_min
+        lmax = p.plank_length_max
+        off  = p.offset_row
+        seed = p.plank_random_seed
+
+        rng = random.Random(seed)
+
+        x_s = bw + ox
+        y_s = bw + oy
+        x_e = w - bw
+        y_e = d - bw
+
+        step_x = pw + gw
+        n_rows = max(1, int((x_e - x_s) / step_x) + 2)
+
+        for row in range(n_rows):
+            x0_row = x_s + row * step_x
+            if x0_row >= x_e:
+                break
+            pw_row = min(pw, x_e - x0_row)
+
+            # Offset de la fila (alternas)
+            row_off = off * rng.uniform(lmin, lmax) if row % 2 == 1 else 0.0
+
+            y_cur = y_s - row_off
+            plank_idx = 0
+
+            while y_cur < y_e:
+                length = rng.uniform(lmin, lmax)
+                y1     = min(y_cur + length, y_e)
+                y0_c   = max(y_cur, y_s)
+                len_c  = y1 - y0_c
+
+                if len_c > 0.02 and pw_row > 0.01:
+                    mat_idx = mi if plank_idx % 2 == 0 else mi_b
+                    self._tile(x0_row, y0_c, pw_row, len_c, tt, mat_idx, bev)
+
+                y_cur += length + gw
+                plank_idx += 1
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: RANDOM TILES
+    # ────────────────────────────────────────────────────────
+    def _build_random(self):
+        """
+        Baldosas de formato libre / random.
+        Mezcla de piezas de distintos tamaños en una cuadrícula.
+        """
+        p    = self.props
+        tw   = p.tile_width
+        td   = p.tile_depth
+        tt   = p.tile_thickness
+        gw   = p.grout_width
+        bev  = p.bevel_size
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+        seed = p.plank_random_seed
+
+        rng  = random.Random(seed)
+        x_s  = bw + ox
+        y_s  = bw + oy
+        x_e  = w - bw
+        y_e  = d - bw
+
+        # Tamaños posibles (múltiplos del tile base)
+        sizes = [(1, 1), (1, 2), (2, 1), (2, 2), (1, 3), (3, 1)]
+
+        step = (tw + gw)
+        n_cols = max(1, int((x_e - x_s) / step) + 2)
+        n_rows = max(1, int((y_e - y_s) / step) + 2)
+
+        placed = set()
+
+        for row in range(n_rows):
+            for col in range(n_cols):
+                if (col, row) in placed:
+                    continue
+
+                x0 = x_s + col * step
+                y0 = y_s + row * step
+
+                if x0 >= x_e or y0 >= y_e:
+                    continue
+
+                # Elegir tamaño aleatorio
+                sc, sr = rng.choice(sizes)
+
+                # Marcar celdas ocupadas
+                for dc in range(sc):
+                    for dr in range(sr):
+                        placed.add((col + dc, row + dr))
+
+                tw_r = min(sc * step - gw, x_e - x0)
+                td_r = min(sr * step - gw, y_e - y0)
+
+                if tw_r < 0.02 or td_r < 0.02:
+                    continue
+
+                mat_idx = mi if (col + row) % 2 == 0 else mi_b
+                self._tile(x0, y0, tw_r, td_r, tt, mat_idx, bev)
+
+    # ────────────────────────────────────────────────────────
+    #  PATTERN: COBBLESTONE
+    # ────────────────────────────────────────────────────────
+    def _build_cobblestone(self):
+        """
+        Adoquín irregular.
+        Piezas pseudo-rectangulares con tamaños aleatorios
+        y ligeras variaciones de posición.
+        """
+        p    = self.props
+        tt   = p.tile_thickness
+        bev  = p.bevel_size
+        gw   = p.grout_width
+        mi   = p.mat_tile
+        mi_b = p.mat_tile_b
+        ox   = p.offset_x
+        oy   = p.offset_y
+        w    = p.width
+        d    = p.depth
+        bw   = p.border_width if p.border_enable else 0.0
+        smin = p.cobble_size_min
+        smax = p.cobble_size_max
+        seed = p.cobble_seed
+
+        rng  = random.Random(seed)
+        x_s  = bw + ox
+        y_s  = bw + oy
+        x_e  = w - bw
+        y_e  = d - bw
+
+        y_cur = y_s
+        idx   = 0
+
+        while y_cur < y_e:
+            row_h = rng.uniform(smin, smax)
+            x_cur = x_s
+
+            while x_cur < x_e:
+                cw = rng.uniform(smin, smax)
+                # Variación de posición y tamaño
+                jitter_x = rng.uniform(-gw, gw)
+                jitter_y = rng.uniform(-gw, gw)
+
+                x0 = x_cur + gw * 0.5 + jitter_x * 0.5
+                y0 = y_cur + gw * 0.5 + jitter_y * 0.5
+                tw_c = min(cw - gw, x_e - x0)
+                td_c = min(row_h - gw, y_e - y0)
+
+                if tw_c > 0.02 and td_c > 0.02:
+                    mat_idx = mi if idx % 3 != 0 else mi_b
+                    self._tile(x0, y0, tw_c, td_c, tt, mat_idx, bev)
+
+                x_cur += cw
+                idx   += 1
+
+            y_cur += row_h
+
+    # ────────────────────────────────────────────────────────
+    #  GENERATE
+    # ────────────────────────────────────────────────────────
+    def generate(self):
+        """Genera el patrón completo."""
+        p = self.props
+
+        # 1) Base
+        self._build_base()
+
+        # 2) Borde
+        self._build_border()
+
+        # 3) Patrón principal
+        dispatch = {
+            'REGULAR'     : self._build_regular,
+            'OFFSET'      : self._build_offset,
+            'HERRINGBONE' : self._build_herringbone,
+            'PARQUET'     : self._build_parquet,
+            'DIAGONAL'    : self._build_diagonal,
+            'HEXAGONAL'   : self._build_hexagonal,
+            'BASKET_WEAVE': self._build_basket_weave,
+            'RANDOM'      : self._build_random,
+            'COBBLESTONE' : self._build_cobblestone,
+            'WOOD_PLANK'  : self._build_wood_plank,
+        }
+
+        builder = dispatch.get(p.pattern)
+        if builder:
+            builder()
+
+        # 4) Rotación global del patrón
+        if abs(p.pattern_rotation) > 0.001:
+            rot = Matrix.Rotation(p.pattern_rotation, 4, 'Z')
+            cx  = p.width  * 0.5
+            cy  = p.depth  * 0.5
+            for v in self.bm.verts:
+                v.co = rot @ (v.co - Vector((cx, cy, 0))) + Vector((cx, cy, 0))
+
+        try:
+            bmesh.ops.recalc_face_normals(
+                bm=self.bm, faces=self.bm.faces
+            )
+        except Exception:
+            pass
+
+        return self.bm
+
+
+# ════════════════════════════════════════════════════════════
+#  UPDATE / REBUILD
+# ════════════════════════════════════════════════════════════
+def _find_floor_object(props):
+    name = props.object_name
+    if name and name in bpy.data.objects:
+        return bpy.data.objects[name]
+    for obj in bpy.data.objects:
+        if (obj.type == 'MESH'
+                and hasattr(obj, AF_FLOOR_PROP)
+                and getattr(obj, AF_FLOOR_PROP) is props):
+            return obj
+    return None
+
+
+def af_floor_update(self, context):
+    obj = _find_floor_object(self)
+    if obj is None:
+        obj = context.active_object
+    if obj is None or obj.type != 'MESH':
+        return
+    props = getattr(obj, AF_FLOOR_PROP, None)
+    if props is None or not props.is_af_floor:
+        return
+    _rebuild_floor_mesh(obj, props)
+
+
+def _rebuild_floor_mesh(obj, props):
+    gen = AF_FloorGenerator(props)
+    bm  = gen.generate()
+    if bm is None:
+        return
+    me = obj.data
+    bm.to_mesh(me)
+    bm.free()
+    me.update()
+
+    for poly in me.polygons:
+        poly.use_smooth = False
+
+    if "material_index" in me.polygon_layers_int:
+        layer = me.polygon_layers_int["material_index"]
+        for poly in me.polygons:
+            poly.material_index = layer.data[poly.index].value
+
+
+def _setup_floor_materials(obj):
+    mat_names = [
+        "AF.Floor.Tile",     # 0 tile A
+        "AF.Floor.Marble",   # 1 grout / tile B
+        "AF.Wall.Concrete",  # 2 border
+        "AF.Slab.Default",   # 3 base
+        "AF.Floor.Wood",     # 4 tile B alternate
+    ]
+    af_material.ensure_af_materials_for_object(obj, mat_names)
+
+
+def _create_floor_object(context, name="AF_Floor"):
+    me  = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, me)
+    context.collection.objects.link(obj)
+    context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    props              = obj.archiforge_floor
+    props.is_af_floor  = True
+    props.object_name  = obj.name
+    _setup_floor_materials(obj)
+    return obj, props
+
+
+# ════════════════════════════════════════════════════════════
+#  OPERADORES
+# ════════════════════════════════════════════════════════════
+class ARCHIFORGE_OT_floor(Operator):
+    bl_idname      = "archiforge.floor"
+    bl_label       = "Add AF Floor"
+    bl_description = "Add a parametric ArchiForge floor pattern"
+    bl_options     = {'REGISTER', 'UNDO'}
+
+    pattern : EnumProperty(
+        name="Pattern", items=AF_FLOOR_PATTERNS, default='REGULAR',
+    )
+    width : FloatProperty(
+        name="Width", default=4.0, min=0.1, unit='LENGTH',
+    )
+    depth : FloatProperty(
+        name="Depth", default=3.0, min=0.1, unit='LENGTH',
+    )
+    tile_width : FloatProperty(
+        name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
+    )
+    tile_depth : FloatProperty(
+        name="Tile Depth", default=0.60, min=0.02, unit='LENGTH',
+    )
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        col = layout.column(align=True)
+        col.label(text="New Floor Pattern", icon='MESH_GRID')
+        col.prop(self, "pattern")
+        col.separator()
+        col.prop(self, "width")
+        col.prop(self, "depth")
+        col.separator()
+        col.prop(self, "tile_width")
+        col.prop(self, "tile_depth")
+
+        # Info — número aprox de piezas
+        n_x = max(1, int(self.width / self.tile_width))
+        n_y = max(1, int(self.depth / self.tile_depth))
+        col.separator()
+        col.label(
+            text=f"≈ {n_x * n_y} tiles ({n_x}×{n_y})",
+            icon='INFO'
+        )
+
+    def execute(self, context):
+        bpy.ops.object.select_all(action='DESELECT')
+        obj, props = _create_floor_object(context, "AF_Floor")
+        props.pattern    = self.pattern
+        props.width      = self.width
+        props.depth      = self.depth
+        props.tile_width = self.tile_width
+        props.tile_depth = self.tile_depth
+        _rebuild_floor_mesh(obj, props)
+        self.report({'INFO'}, f"Floor created: {obj.name}")
+        return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_floor_update(Operator):
+    bl_idname  = "archiforge.floor_update"
+    bl_label   = "Update Floor"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (
+            obj is not None and obj.type == 'MESH'
+            and hasattr(obj, AF_FLOOR_PROP)
+            and obj.archiforge_floor.is_af_floor
+        )
+
+    def execute(self, context):
+        obj = context.active_object
+        _rebuild_floor_mesh(obj, obj.archiforge_floor)
+        self.report({'INFO'}, "Floor updated")
+        return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_floor_from_wall(Operator):
+    """Crea un piso con las dimensiones del muro activo."""
+    bl_idname  = "archiforge.floor_from_wall"
+    bl_label   = "Floor from Wall"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    pattern : EnumProperty(
+        name="Pattern", items=AF_FLOOR_PATTERNS, default='REGULAR',
+    )
+    tile_width : FloatProperty(
+        name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (
+            obj is not None and obj.type == 'MESH'
+            and hasattr(obj, "archiforge_wall")
+            and obj.archiforge_wall.is_af_wall
+        )
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
+        col.prop(self, "pattern")
+        col.prop(self, "tile_width")
+
+    def execute(self, context):
+        wall  = context.active_object
+        pts   = [wall.matrix_world @ Vector(c) for c in wall.bound_box]
+        xs    = [p.x for p in pts]
+        ys    = [p.y for p in pts]
+        w     = max(xs) - min(xs)
+        d     = max(ys) - min(ys)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        obj, props = _create_floor_object(context, "AF_Floor")
+        props.pattern    = self.pattern
+        props.width      = w
+        props.depth      = d
+        props.tile_width = self.tile_width
+        props.tile_depth = self.tile_width
+        obj.location     = Vector((min(xs), min(ys), 0.0))
+        _rebuild_floor_mesh(obj, props)
+        self.report({'INFO'}, f"Floor from wall '{wall.name}'")
+        return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_floor_from_curve(Operator):
+    """Crea un piso siguiendo el contorno de una curva."""
+    bl_idname  = "archiforge.floor_from_curve"
+    bl_label   = "Floor from Curve"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    pattern : EnumProperty(
+        name="Pattern", items=AF_FLOOR_PATTERNS, default='REGULAR',
+    )
+    tile_width : FloatProperty(
+        name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
+    )
+
+    @classmethod
+    def poll(cls, context):
+        return (
+            context.active_object is not None
+            and context.active_object.type == 'CURVE'
+        )
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def draw(self, context):
+        col = self.layout.column(align=True)
+        col.prop(self, "pattern")
+        col.prop(self, "tile_width")
+
+    def execute(self, context):
+        curve = context.active_object
+        mw    = curve.matrix_world
+        pts   = []
+        for spline in curve.data.splines:
+            if spline.type == 'BEZIER':
+                for bp in spline.bezier_points:
+                    pts.append(mw @ bp.co)
+            else:
+                for bp in spline.points:
+                    pts.append(mw @ Vector(bp.co[:3]))
+
+        if len(pts) < 2:
+            self.report({'ERROR'}, "Need at least 2 points")
+            return {'CANCELLED'}
+
+        xs = [p.x for p in pts]
+        ys = [p.y for p in pts]
+        w  = max(xs) - min(xs)
+        d  = max(ys) - min(ys)
+
+        bpy.ops.object.select_all(action='DESELECT')
+        obj, props = _create_floor_object(context, "AF_Floor")
+        props.pattern    = self.pattern
+        props.width      = max(w, 0.1)
+        props.depth      = max(d, 0.1)
+        props.tile_width = self.tile_width
+        props.tile_depth = self.tile_width
+        obj.location     = Vector((min(xs), min(ys), 0.0))
+        _rebuild_floor_mesh(obj, props)
+        self.report({'INFO'}, f"Floor from curve '{curve.name}'")
+        return {'FINISHED'}
+
+
+# ════════════════════════════════════════════════════════════
+#  PANEL
+# ════════════════════════════════════════════════════════════
+class ARCHIFORGE_PT_floor(Panel):
+    bl_label       = "Floor Properties"
+    bl_idname      = "ARCHIFORGE_PT_floor"
+    bl_space_type  = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category    = "ArchiForge"
+    bl_context     = "objectmode"
+    bl_options     = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        obj = context.active_object
+        return (
+            obj is not None and obj.type == 'MESH'
+            and hasattr(obj, AF_FLOOR_PROP)
+            and obj.archiforge_floor.is_af_floor
+        )
+
+    def draw_header(self, context):
+        self.layout.label(text="", icon='MESH_GRID')
+
+    def draw(self, context):
+        props  = context.active_object.archiforge_floor
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        # ── Patrón ───────────────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Pattern", icon='MODIFIER')
+        col.prop(props, "pattern", text="")
+        col.prop(props, "origin_center")
+
+        # ── Área ─────────────────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Area", icon='ARROW_LEFTRIGHT')
+        col.prop(props, "width")
+        col.prop(props, "depth")
+
+        # Info
+        n_x = max(1, int(props.width / max(props.tile_width, 0.01)))
+        n_y = max(1, int(props.depth / max(props.tile_depth, 0.01)))
+        col.label(
+            text=f"≈ {n_x * n_y} tiles",
+            icon='INFO'
+        )
+
+        # ── Baldosa ───────────────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Tile / Piece", icon='MESH_PLANE')
+        col.prop(props, "tile_width")
+        col.prop(props, "tile_depth")
+        col.prop(props, "tile_thickness")
+        col.prop(props, "bevel_size")
+
+        # ── Patrón específico ─────────────────────────────────
+        if props.pattern == 'OFFSET':
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Offset Settings", icon='MODIFIER')
+            col.prop(props, "offset_row")
+
+        elif props.pattern == 'HERRINGBONE':
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Herringbone Settings")
+            col.prop(props, "herringbone_angle")
+
+        elif props.pattern == 'PARQUET':
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Parquet Settings", icon='MESH_CUBE')
+            col.prop(props, "parquet_style")
+            col.prop(props, "parquet_blocks")
+
+        elif props.pattern == 'HEXAGONAL':
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Hex Settings", icon='MESH_CIRCLE')
+            col.prop(props, "hex_size")
+            col.prop(props, "hex_flat_top")
+
+        elif props.pattern == 'WOOD_PLANK':
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Plank Settings", icon='MESH_PLANE')
+            col.prop(props, "plank_width")
+            col.prop(props, "plank_length_min")
+            col.prop(props, "plank_length_max")
+            col.prop(props, "offset_row")
+            col.prop(props, "plank_random_seed")
+
+        elif props.pattern in ('RANDOM', 'COBBLESTONE'):
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Random Settings", icon='RNDCURVE')
+            if props.pattern == 'COBBLESTONE':
+                col.prop(props, "cobble_size_min")
+                col.prop(props, "cobble_size_max")
+                col.prop(props, "cobble_seed")
+            else:
+                col.prop(props, "plank_random_seed")
+
+        # ── Junta ─────────────────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Grout / Joint", icon='MOD_THICKNESS')
+        col.prop(props, "grout_style")
+        col.prop(props, "grout_width")
+        col.prop(props, "grout_depth")
+
+        # ── Offset / Rotación ─────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Layout", icon='ORIENTATION_GLOBAL')
+        col.prop(props, "offset_x")
+        col.prop(props, "offset_y")
+        col.prop(props, "pattern_rotation")
+
+        # ── Borde ─────────────────────────────────────────────
+        box = layout.box()
+        row = box.row(align=True)
+        row.prop(
+            props, "border_enable",
+            text="Border",
+            icon='TRIA_DOWN' if props.border_enable else 'TRIA_RIGHT',
+            toggle=True, emboss=False,
+        )
+        if props.border_enable:
+            col = box.column(align=True)
+            col.prop(props, "border_style")
+            col.prop(props, "border_width")
+            col.prop(props, "border_thickness")
+
+        # ── Base ──────────────────────────────────────────────
+        box = layout.box()
+        row = box.row(align=True)
+        row.prop(
+            props, "base_enable",
+            text="Base Slab",
+            icon='TRIA_DOWN' if props.base_enable else 'TRIA_RIGHT',
+            toggle=True, emboss=False,
+        )
+        if props.base_enable:
+            box.prop(props, "base_thickness")
+
+        # ── Materiales ────────────────────────────────────────
+        box = layout.box()
+        col = box.column(align=True)
+        col.label(text="Materials", icon='MATERIAL')
+        col.prop(props, "mat_tile",   text="Tile A")
+        col.prop(props, "mat_tile_b", text="Tile B")
+        col.prop(props, "mat_grout",  text="Grout")
+        if props.border_enable:
+            col.prop(props, "mat_border", text="Border")
+        if props.base_enable:
+            col.prop(props, "mat_base",   text="Base")
+
+        # ── Acciones ──────────────────────────────────────────
+        layout.separator()
+        row = layout.row(align=True)
+        row.operator(
+            "archiforge.floor_update",
+            text="Force Update",
+            icon='FILE_REFRESH',
+        )
+        row.operator(
+            "archiforge.floor_from_wall",
+            text="From Wall",
+            icon='SNAP_FACE',
+        )
+
+
+# ════════════════════════════════════════════════════════════
+#  REGISTRO
+# ════════════════════════════════════════════════════════════
+classes = [
+    AF_FloorProperties,
+
+    ARCHIFORGE_OT_floor,
+    ARCHIFORGE_OT_floor_update,
+    ARCHIFORGE_OT_floor_from_wall,
+    ARCHIFORGE_OT_floor_from_curve,
+
+    ARCHIFORGE_PT_floor,
+]
+
+
+def register():
+    for cls in classes:
+        bpy.utils.register_class(cls)
+
+    bpy.types.Object.archiforge_floor = PointerProperty(
+        type        = AF_FloorProperties,
+        name        = "ArchiForge Floor",
+        description = "ArchiForge parametric floor pattern properties",
+    )
+    print("[ArchiForge] ✅ af_floor — registered")
+
+
+def unregister():
+    if hasattr(bpy.types.Object, "archiforge_floor"):
+        del bpy.types.Object.archiforge_floor
+
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
+
+    print("[ArchiForge] 🔴 af_floor — unregistered")
