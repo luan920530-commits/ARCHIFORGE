@@ -5,6 +5,7 @@
 # ║         Ventanas Paramétricas para Blender 3.3 LTS      ║
 # ║         GPL v3 — ArchiForge Devs                        ║
 # ╚══════════════════════════════════════════════════════════╝
+# v1.1 — presets CO (ventanería aluminio Colombia)
 
 # <pep8 compliant>
 
@@ -64,6 +65,23 @@ AF_SILL_TYPES = [
     ('MOLDED', "Molded", "Molded decorative sill"),
 ]
 
+AF_WIN_CO_PRESETS = [
+    ('CUSTOM',   "Custom",   "Medidas manuales"),
+    ('V100x100', "1.00x1.00 Baño",   "Ventanilla baño"),
+    ('V120x120', "1.20x1.20",        "Ventana típica CO"),
+    ('V150x120', "1.50x1.20",        "Ventana alcoba"),
+    ('V200x140', "2.00x1.40 Sala",   "Ventana sala"),
+    ('V240x220', "2.40x2.20 Balcón", "Puerta-ventana"),
+]
+
+AF_WIN_CO_DIMS = {
+    'V100x100': (1.00, 1.00, 1.20),
+    'V120x120': (1.20, 1.20, 0.90),
+    'V150x120': (1.50, 1.20, 0.90),
+    'V200x140': (2.00, 1.40, 0.60),
+    'V240x220': (2.40, 2.20, 0.10),
+}
+
 
 # ════════════════════════════════════════════════════════════
 #  PROPERTYGROUP
@@ -80,6 +98,11 @@ class AF_WindowProperties(PropertyGroup):
     window_type : EnumProperty(
         name="Window Type", items=AF_WIN_TYPES, default='CASEMENT',
         update=lambda s, c: af_window_update(s, c),
+    )
+
+    co_preset : EnumProperty(
+        name="CO Preset", items=AF_WIN_CO_PRESETS, default='CUSTOM',
+        update=lambda s, c: af_win_co_preset_update(s, c),
     )
 
     width : FloatProperty(
@@ -631,6 +654,13 @@ def _find_window_object(props):
     return None
 
 
+def af_win_co_preset_update(self, context):
+    dims = AF_WIN_CO_DIMS.get(self.co_preset)
+    if dims is None:
+        return
+    self.width, self.height, self.sill_height = dims
+
+
 def af_window_update(self, context):
     obj = _find_window_object(self)
     if obj is None:
@@ -1011,6 +1041,7 @@ class ARCHIFORGE_PT_window(Panel):
         col = box.column(align=True)
         col.label(text="Type", icon='MODIFIER')
         col.prop(props, "window_type", text="")
+        col.prop(props, "co_preset", text="CO")
 
         box = layout.box()
         col = box.column(align=True)

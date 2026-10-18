@@ -5,6 +5,7 @@
 # ║         Puertas Paramétricas para Blender 3.3 LTS       ║
 # ║         GPL v3 — ArchiForge Devs                        ║
 # ╚══════════════════════════════════════════════════════════╝
+# v1.1 — presets CO (medidas comerciales Colombia)
 
 # <pep8 compliant>
 
@@ -92,6 +93,25 @@ AF_HINGE_SIDES = [
     ('RIGHT', "Right", "Hinge on right side"),
 ]
 
+AF_DOOR_CO_PRESETS = [
+    ('CUSTOM',   "Custom",   "Medidas manuales"),
+    ('P070x200', "0.70x2.00 Baño",    "Puerta baño"),
+    ('P075x200', "0.75x2.00",         "Puerta servicio"),
+    ('P080x210', "0.80x2.10 Alcoba",  "Puerta alcoba"),
+    ('P090x210', "0.90x2.10 Acceso",  "Puerta principal"),
+    ('P100x220', "1.00x2.20",         "Puerta amplia"),
+    ('P120x220', "1.20x2.20 Doble",   "Referencia doble"),
+]
+
+AF_DOOR_CO_DIMS = {
+    'P070x200': (0.70, 2.00),
+    'P075x200': (0.75, 2.00),
+    'P080x210': (0.80, 2.10),
+    'P090x210': (0.90, 2.10),
+    'P100x220': (1.00, 2.20),
+    'P120x220': (1.20, 2.20),
+}
+
 
 # ════════════════════════════════════════════════════════════
 #  PROPERTYGROUP
@@ -114,6 +134,13 @@ class AF_DoorProperties(PropertyGroup):
         items   = AF_DOOR_TYPES,
         default = 'SINGLE',
         update  = lambda s, c: af_door_update(s, c),
+    )
+
+    co_preset : EnumProperty(
+        name    = "CO Preset",
+        items   = AF_DOOR_CO_PRESETS,
+        default = 'CUSTOM',
+        update  = lambda s, c: af_door_co_preset_update(s, c),
     )
 
     width : FloatProperty(
@@ -626,6 +653,13 @@ def _find_door_object(props):
     return None
 
 
+def af_door_co_preset_update(self, context):
+    dims = AF_DOOR_CO_DIMS.get(self.co_preset)
+    if dims is None:
+        return
+    self.width, self.height = dims
+
+
 def af_door_update(self, context):
     obj = _find_door_object(self)
     if obj is None:
@@ -1013,6 +1047,7 @@ class ARCHIFORGE_PT_door(Panel):
         col = box.column(align=True)
         col.label(text="Type", icon='MODIFIER')
         col.prop(props, "door_type", text="")
+        col.prop(props, "co_preset", text="CO")
 
         box = layout.box()
         col = box.column(align=True)

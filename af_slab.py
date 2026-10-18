@@ -6,6 +6,7 @@
 # ║         GPL v3 — ArchiForge Devs                        ║
 # ╚══════════════════════════════════════════════════════════╝
 # v1.1 — parche Blender 3.3: bmesh posicional + material_index nativo
+# v1.2 — sistemas: MACIZA / ALIGERADA / PLACA_FACIL / STEELDECK
 
 # <pep8 compliant>
 
@@ -68,6 +69,13 @@ AF_SLAB_USE = [
     ('CEILING', "Ceiling", "Ceiling slab"),
     ('ROOF',    "Roof",    "Flat roof slab"),
     ('GENERIC', "Generic", "Generic slab"),
+]
+
+AF_SLAB_SYSTEMS = [
+    ('MACIZA',      "Maciza",      "Losa maciza en concreto"),
+    ('ALIGERADA',   "Aligerada",   "Viguetas + casetones + torta"),
+    ('PLACA_FACIL', "Placa facil", "Vigueta pretensada + bloquelon"),
+    ('STEELDECK',   "Steeldeck",   "Lamina colaborante + torta"),
 ]
 
 
@@ -142,6 +150,34 @@ class AF_SlabProperties(PropertyGroup):
     slab_use : EnumProperty(
         name="Use", items=AF_SLAB_USE, default='FLOOR',
         update=lambda s, c: af_slab_update(s, c),
+    )
+    slab_system : EnumProperty(
+        name="System", items=AF_SLAB_SYSTEMS, default='MACIZA',
+        update=lambda s, c: af_slab_system_update(s, c),
+    )
+    joist_width : FloatProperty(
+        name="Joist W", default=0.10, min=0.05, max=0.30,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
+    )
+    joist_depth : FloatProperty(
+        name="Joist H", default=0.25, min=0.10, max=0.60,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
+    )
+    joist_spacing : FloatProperty(
+        name="Joist @", default=0.60, min=0.30, max=1.20,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
+    )
+    topping : FloatProperty(
+        name="Topping", default=0.05, min=0.03, max=0.15,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
+    )
+    deck_height : FloatProperty(
+        name="Deck H", default=0.075, min=0.04, max=0.12,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
+    )
+    deck_pitch : FloatProperty(
+        name="Deck Pitch", default=0.30, min=0.15, max=0.60,
+        unit='LENGTH', update=lambda s, c: af_slab_update(s, c),
     )
 
     # ── Dimensiones rectángulo ───────────────────────────────
@@ -246,6 +282,8 @@ class AF_SlabProperties(PropertyGroup):
     mat_top    : IntProperty(name="Top Finish Mat",  default=1, min=0)
     mat_bottom : IntProperty(name="Bottom Finish",   default=2, min=0)
     mat_edge   : IntProperty(name="Edge Material",   default=3, min=0)
+    mat_steel    : IntProperty(name="Steel Material",   default=4, min=0)
+    mat_void     : IntProperty(name="Void Material",    default=5, min=0)
 
 
 # ════════════════════════════════════════════════════════════
@@ -352,6 +390,72 @@ class AF_SlabGenerator:
             ry = p.x * sa + p.y * ca + cy
             out.append(Vector((rx, ry)))
         return out
+
+    def _in_poly(self, x, y, outline):
+        """Point-in-polygon (ray casting) para recortar al contorno."""
+        inside = False
+        n = len(outline)
+        for i in range(n):
+            x1, y1 = outline[i].x, outline[i].y
+            x2, y2 = outline[(i + 1) % n].x, outline[(i + 1) % n].y
+            if ((y1 > y) != (y2 > y)):
+                xin = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+                if x < xin:
+                    inside = not inside
+        return inside
+
+    def _clip_runs(self, xm, y0, y1, outline, step=0.10):
+        """Tramos en Y dentro del contorno para una X dada."""
+        runs = []
+        run = None
+        y = y0
+        while y < y1 - 1e-9:
+            ym = min(y + step / 2, y1)
+            inside = self._in_poly(xm, ym, outline)
+            if inside and run is None:
+                run = y
+            if run is not None and (not inside or
+                                    y + step >= y1 - 1e-9):
+                runs.append((run, y if not inside else y1))
+                run = None
+            y += step
+        return runs
+
+    def _box(self, x0, x1, y0, y1, z0, z1, mat_idx=0):
+        bm = self.bm
+        if x1 - x0 < 0.005 or y1 - y0 < 0.005 or z1 - z0 < 0.004:
+            return
+        try:
+            v = [bm.verts.new(Vector((x, y, z))) for z in (z0, z1)
+                 for (x, y) in ((x0, y0), (x1, y0), (x1, y1),
+                                (x0, y1))]
+            for fi in [(0, 1, 5, 4), (2, 3, 7, 6), (0, 3, 2, 1),
+                       (4, 5, 6, 7), (0, 4, 7, 3), (1, 2, 6, 5)]:
+                f = bm.faces.new([v[i] for i in fi])
+                f.material_index = mat_idx
+        except Exception:
+            pass
+
+    def _side_walls(self, outline, z_top, z_bot, mat_idx):
+        """Solo caras laterales del contorno (cierra bordes)."""
+        bm = self.bm
+        n = len(outline)
+        for i in range(n):
+            j = (i + 1) % n
+            try:
+                v0 = bm.verts.new(Vector((outline[i].x, outline[i].y,
+                                          z_bot)))
+                v1 = bm.verts.new(Vector((outline[j].x, outline[j].y,
+                                          z_bot)))
+                v2 = bm.verts.new(Vector((outline[j].x, outline[j].y,
+                                          z_top)))
+                v3 = bm.verts.new(Vector((outline[i].x, outline[i].y,
+                                          z_top)))
+                f = bm.faces.new([v0, v1, v2, v3])
+                f.material_index = mat_idx
+            except Exception:
+                pass
+        bm.verts.ensure_lookup_table()
 
     # ────────────────────────────────────────────────────────
     def _extrude_profile(self, outline, z_top, z_bot, mat_top, mat_bot, mat_side):
@@ -503,6 +607,97 @@ class AF_SlabGenerator:
         # interno; aquí priorizamos estabilidad en 3.3.
 
     # ────────────────────────────────────────────────────────
+    def _hole_sides(self, holes, z_top, z_bot, mat_idx):
+        bm = self.bm
+        for hpts in holes:
+            n = len(hpts)
+            vt = [bm.verts.new(Vector((q.x, q.y, z_top)))
+                  for q in hpts]
+            vb = [bm.verts.new(Vector((q.x, q.y, z_bot)))
+                  for q in hpts]
+            bm.verts.ensure_lookup_table()
+            for i in range(n):
+                j = (i + 1) % n
+                try:
+                    f = bm.faces.new([vt[i], vt[j], vb[j], vb[i]])
+                    f.material_index = mat_idx
+                except Exception:
+                    pass
+
+    def _build_ribbed(self, outline, z_top, z_bot, mat_conc,
+                      mat_void):
+        """Aligerada / placa facil recortada al contorno."""
+        p = self.props
+        tp = max(p.topping, 0.03)
+        jw = max(p.joist_width, 0.05)
+        jh = max(p.joist_depth, 0.10)
+        sp = max(p.joist_spacing, 0.3)
+        self._extrude_profile(outline, z_top, z_top - tp,
+                              mat_conc, mat_conc, mat_conc)
+        zj = max(z_top - tp - jh, z_bot)
+        self._side_walls(outline, z_top - tp, zj, mat_conc)
+        xs = [q.x for q in outline]
+        ys = [q.y for q in outline]
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
+        x = x0 + sp / 2
+        while x < x1:
+            for ya, yb in self._clip_runs(x, y0, y1, outline):
+                self._box(x - jw / 2, x + jw / 2, ya, yb, zj,
+                          z_top - tp, mat_conc)
+            x += sp
+        x = x0 + sp / 2 + sp / 2
+        while x < x1:
+            cw = sp - jw
+            if cw > 0.05:
+                for ya, yb in self._clip_runs(x, y0, y1, outline):
+                    self._box(x - cw / 2 + 0.01, x + cw / 2 - 0.01,
+                              ya, yb, zj + 0.01,
+                              z_top - tp - 0.005, mat_void)
+            x += sp
+
+    def _build_steeldeck(self, outline, z_top, z_bot, mat_conc,
+                         mat_steel):
+        """Steeldeck: torta + lamina trapezoidal recortada."""
+        p = self.props
+        tp = max(p.topping, 0.03)
+        dh = max(p.deck_height, 0.04)
+        pitch = max(p.deck_pitch, 0.15)
+        self._extrude_profile(outline, z_top, z_top - tp,
+                              mat_conc, mat_conc, mat_conc)
+        zr = max(z_top - tp - dh, z_bot)
+        self._side_walls(outline, z_top - tp, zr, mat_conc)
+        prof = [(0.00, 0.0), (0.30, 0.0), (0.38, 1.0),
+                (0.62, 1.0), (0.70, 0.0), (1.00, 0.0)]
+        xs = [q.x for q in outline]
+        ys = [q.y for q in outline]
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
+        bm = self.bm
+        k = 0
+        while x0 + k * pitch < x1:
+            xb = x0 + k * pitch
+            for sg in range(len(prof) - 1):
+                fa, za = prof[sg]
+                fb, zb = prof[sg + 1]
+                xa, xe = xb + fa * pitch, xb + fb * pitch
+                if xe <= x0 or xa >= x1:
+                    continue
+                z0s, z1s = zr + za * dh, zr + zb * dh
+                xm = (xa + xe) / 2
+                for ya, yb in self._clip_runs(xm, y0, y1, outline):
+                    try:
+                        v0 = bm.verts.new(Vector((xa, ya, z0s)))
+                        v1 = bm.verts.new(Vector((xa, yb, z0s)))
+                        v2 = bm.verts.new(Vector((xe, yb, z1s)))
+                        v3 = bm.verts.new(Vector((xe, ya, z1s)))
+                        f = bm.faces.new([v0, v1, v2, v3])
+                        f.material_index = mat_steel
+                    except Exception:
+                        pass
+            k += 1
+        bm.verts.ensure_lookup_table()
+
     def generate(self):
         p = self.props
 
@@ -516,35 +711,21 @@ class AF_SlabGenerator:
         z_top = p.z_offset
         z_bot = p.z_offset - p.thickness
 
-        # — Núcleo —
+        # — Núcleo según sistema constructivo —
+        sys_ = p.slab_system
+        if sys_ == 'MACIZA':
+            self._extrude_profile(
+                outline, z_top, z_bot,
+                p.mat_core, p.mat_core, p.mat_edge
+            )
+        elif sys_ in ('ALIGERADA', 'PLACA_FACIL'):
+            self._build_ribbed(outline, z_top, z_bot,
+                               p.mat_core, p.mat_void)
+        elif sys_ == 'STEELDECK':
+            self._build_steeldeck(outline, z_top, z_bot,
+                                  p.mat_core, p.mat_steel)
         if holes:
-            # Extrusión exterior + laterales de huecos
-            # (cara top/bottom simple; huecos abiertos por laterales)
-            self._extrude_profile(
-                outline, z_top, z_bot,
-                p.mat_core, p.mat_core, p.mat_edge
-            )
-            # Prismas de hueco (solo laterales) restando visualmente
-            # con booleans reales sería ideal; aquí abrimos el paso
-            for hpts in holes:
-                # laterales del hueco a través del espesor
-                bm = self.bm
-                n = len(hpts)
-                vt = [bm.verts.new(Vector((q.x, q.y, z_top))) for q in hpts]
-                vb = [bm.verts.new(Vector((q.x, q.y, z_bot))) for q in hpts]
-                bm.verts.ensure_lookup_table()
-                for i in range(n):
-                    j = (i + 1) % n
-                    try:
-                        f = bm.faces.new([vt[i], vt[j], vb[j], vb[i]])
-                        f.material_index = p.mat_edge
-                    except Exception:
-                        pass
-        else:
-            self._extrude_profile(
-                outline, z_top, z_bot,
-                p.mat_core, p.mat_core, p.mat_edge
-            )
+            self._hole_sides(holes, z_top, z_bot, p.mat_edge)
 
         # — Acabado superior —
         if p.top_finish_enable:
@@ -597,6 +778,26 @@ def _find_slab_object(props):
                 and getattr(obj, AF_SLAB_PROP) is props):
             return obj
     return None
+
+
+def af_slab_system_update(self, context):
+    presets = {
+        'MACIZA': {'thickness': 0.20},
+        'ALIGERADA': {'thickness': 0.30, 'joist_width': 0.10,
+                      'joist_depth': 0.25, 'joist_spacing': 0.60,
+                      'topping': 0.05},
+        'PLACA_FACIL': {'thickness': 0.20, 'joist_width': 0.10,
+                        'joist_depth': 0.14, 'joist_spacing': 0.50,
+                        'topping': 0.04},
+        'STEELDECK': {'thickness': 0.13, 'deck_height': 0.075,
+                      'deck_pitch': 0.30, 'topping': 0.055},
+    }
+    for k, v in presets.get(self.slab_system, {}).items():
+        try:
+            setattr(self, k, v)
+        except Exception:
+            pass
+    af_slab_update(self, context)
 
 
 def af_slab_update(self, context):
@@ -685,6 +886,8 @@ def _setup_slab_materials(obj):
         "AF.Floor.Concrete",
         "AF.Wall.Plaster",
         "AF.Wall.Concrete",
+        "AF.Slab.Steel",
+        "AF.Slab.Void",
     ]
     af_material.ensure_af_materials_for_object(obj, mat_names)
 
@@ -1040,6 +1243,20 @@ class ARCHIFORGE_PT_slab(Panel):
 
         box = layout.box()
         col = box.column(align=True)
+        col.label(text="System", icon='MODIFIER')
+        col.prop(props, "slab_system", text="")
+        if props.slab_system in ('ALIGERADA', 'PLACA_FACIL'):
+            col.prop(props, "joist_width")
+            col.prop(props, "joist_depth")
+            col.prop(props, "joist_spacing")
+            col.prop(props, "topping")
+        if props.slab_system == 'STEELDECK':
+            col.prop(props, "deck_height")
+            col.prop(props, "deck_pitch")
+            col.prop(props, "topping", text="Concrete")
+
+        box = layout.box()
+        col = box.column(align=True)
         col.label(text="Dimensions", icon='ARROW_LEFTRIGHT')
         if props.slab_type == 'RECTANGLE':
             col.prop(props, "width")
@@ -1096,6 +1313,10 @@ class ARCHIFORGE_PT_slab(Panel):
         col.label(text="Materials", icon='MATERIAL')
         col.prop(props, "mat_core", text="Core")
         col.prop(props, "mat_edge", text="Edge")
+        if props.slab_system == 'STEELDECK':
+            col.prop(props, "mat_steel", text="Steel")
+        if props.slab_system in ('ALIGERADA', 'PLACA_FACIL'):
+            col.prop(props, "mat_void", text="Void")
         if props.top_finish_enable:
             col.prop(props, "mat_top", text="Top")
         if props.bottom_finish_enable:

@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 2, 0),
+    "version"     : (1, 5, 1),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -109,6 +109,11 @@ if "bpy" in locals():
         "af_furniture",
         "af_kitchen",
         "af_decor",
+        "af_openings",
+        "af_stairs",
+        "af_quantities",
+        "af_structure",
+        "af_control_center",
         # 4. UI (último, depende de todo lo anterior)
         "af_rendering",
         "af_panel",
@@ -118,7 +123,17 @@ if "bpy" in locals():
     for _mod_name in _RELOAD_ORDER:
         _mod = locals().get(_mod_name)
         if _mod is None:
-            continue
+            # Nuevo en esta versión o falló antes: intentar importar.
+            try:
+                _mod = _imp.import_module(
+                    ".{}".format(_mod_name), __name__)
+                globals()[_mod_name] = _mod
+            except Exception as _err:  # noqa: BLE001
+                print("[ArchiForge] import '{}' falló: {}".format(
+                    _mod_name, _err))
+                globals()[_mod_name] = None
+                _mod = None
+                continue
         try:
             _imp.reload(_mod)
         except Exception as _err:  # noqa: BLE001 — reload nunca debe abortar
@@ -129,37 +144,54 @@ if "bpy" in locals():
     del _imp, _RELOAD_ORDER, _mod_name, _mod
 
 else:
-    # ── 1. Core ─────────────────────────────────────────────
-    from . import af_material
-    from . import af_snap
-    from . import af_manipulator
-    from . import af_reference_point
-    from . import af_preset
+    # Imports TOLERANTES (v1.5.1): un módulo ausente o con error
+    # se reporta y se omite — ya no tumba todo el addon.
+    import importlib as _imp_first
+    _FIRST_ORDER = (
+        # 1. Core (base del sistema)
+        "af_material",
+        "af_snap",
+        "af_manipulator",
+        "af_reference_point",
+        "af_preset",
+        # 2. Lógica compartida
+        "af_autoboolean",
+        "af_objects_base",
+        # 3. Objetos paramétricos
+        "af_wall",
+        "af_door",
+        "af_window",
+        "af_stair",
+        "af_slab",
+        "af_roof",
+        "af_fence",
+        "af_floor",
+        "af_truss",
+        "af_electrical",
+        "af_bathroom",
+        "af_furniture",
+        "af_kitchen",
+        "af_decor",
+        "af_openings",
+        "af_stairs",
+        "af_quantities",
+        "af_structure",
+        "af_control_center",
+        # 4. UI (último, depende de todo lo anterior)
+        "af_rendering",
+        "af_panel",
+        "af_menu",
+    )
+    for _mod_name in _FIRST_ORDER:
+        try:
+            globals()[_mod_name] = _imp_first.import_module(
+                ".{}".format(_mod_name), __name__)
+        except Exception as _err:  # noqa: BLE001
+            print("[ArchiForge] import '{}' falló: {}".format(
+                _mod_name, _err))
+            globals()[_mod_name] = None
 
-    # ── 2. Lógica compartida ────────────────────────────────
-    from . import af_autoboolean
-    from . import af_objects_base
-
-    # ── 3. Objetos paramétricos ─────────────────────────────
-    from . import af_wall
-    from . import af_door
-    from . import af_window
-    from . import af_stair
-    from . import af_slab
-    from . import af_roof
-    from . import af_fence
-    from . import af_floor
-    from . import af_truss
-    from . import af_electrical
-    from . import af_bathroom
-    from . import af_furniture
-    from . import af_kitchen
-    from . import af_decor
-
-    # ── 4. UI ───────────────────────────────────────────────
-    from . import af_rendering
-    from . import af_panel
-    from . import af_menu
+    del _imp_first, _FIRST_ORDER, _mod_name
 
     af_log("📦 Módulos cargados OK", level=3)
 
@@ -645,6 +677,19 @@ class ARCHIFORGE_PT_create(Panel):
         has_furn = _op_exists("archiforge.furniture")
         has_kit = _op_exists("archiforge.kitchen")
         has_decor = _op_exists("archiforge.decor")
+        open_avail = _available_ids(
+            "af_openings", "AF_OPEN_TYPES",
+            {'DOOR_SINGLE', 'WIN_SLIDING'})
+        stair_avail = _available_ids(
+            "af_stairs", "AF_STAIR_TYPES",
+            {'STRAIGHT', 'RAMP'})
+        has_open = _op_exists("archiforge.opening")
+        has_stair = _op_exists("archiforge.stairs")
+        has_quant = _op_exists("archiforge.quantities_export")
+        struct_avail = _available_ids(
+            "af_structure", "AF_STRUCT_TYPES",
+            {'COLUMN', 'GRID'})
+        has_struct = _op_exists("archiforge.structure")
 
         def bath_btn(row, text, tid, icon='SPHERE'):
             if has_bath and tid in bath_avail:
@@ -676,6 +721,24 @@ class ARCHIFORGE_PT_create(Panel):
                     "archiforge.decor", text=text, icon=icon
                 ).item_type = tid
 
+        def open_btn(row, text, tid, icon='MESH_CUBE'):
+            if has_open and tid in open_avail:
+                row.operator(
+                    "archiforge.opening", text=text, icon=icon
+                ).item_type = tid
+
+        def stair_btn(row, text, tid, icon='MESH_CUBE'):
+            if has_stair and tid in stair_avail:
+                row.operator(
+                    "archiforge.stairs", text=text, icon=icon
+                ).item_type = tid
+
+        def struct_btn(row, text, tid, icon='MESH_CUBE'):
+            if has_struct and tid in struct_avail:
+                row.operator(
+                    "archiforge.structure", text=text, icon=icon
+                ).item_type = tid
+
         # ── SECCIÓN: Herramientas globales ───────────────────
         box = layout.box()
         row = box.row(align=True)
@@ -687,6 +750,13 @@ class ARCHIFORGE_PT_create(Panel):
                 text="Auto Boolean",
                 icon='MOD_BOOLEAN'
             ).mode = 'HYBRID'
+        row = box.row(align=True)
+        if _op_exists("archiforge.control_center"):
+            row.operator(
+                "archiforge.control_center",
+                text="Control Center",
+                icon='HOME'
+            )
 
         layout.separator(factor=0.3)
 
@@ -914,6 +984,72 @@ class ARCHIFORGE_PT_create(Panel):
 
             layout.separator(factor=0.3)
 
+        # ── SECCIÓN: Aberturas (NUEVO — v1.3) ──────────────
+        if has_open:
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Doors & Windows", icon='MESH_CUBE')
+
+            row = col.row(align=True)
+            open_btn(row, "Door 1H", 'DOOR_SINGLE')
+            open_btn(row, "Door 2H", 'DOOR_DOUBLE')
+
+            row = col.row(align=True)
+            open_btn(row, "Door Slid.", 'DOOR_SLIDING')
+            open_btn(row, "Win Slid.", 'WIN_SLIDING')
+
+            row = col.row(align=True)
+            open_btn(row, "Win Cas.", 'WIN_CASEMENT')
+            open_btn(row, "Win Fixed", 'WIN_FIXED')
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Escaleras (NUEVO — v1.3) ────────────────
+        if has_stair:
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Stairs & Ramp", icon='MESH_CUBE')
+
+            row = col.row(align=True)
+            stair_btn(row, "Straight", 'STRAIGHT')
+            stair_btn(row, "L-Shaped", 'L_SHAPED')
+
+            row = col.row(align=True)
+            stair_btn(row, "Spiral", 'SPIRAL')
+            stair_btn(row, "Ramp 8%", 'RAMP')
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Cantidades (NUEVO — v1.3) ──────────────
+        if has_quant:
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Quantities", icon='SPREADSHEET')
+            col.operator("archiforge.quantities_export",
+                         text="Export CSV (Excel)", icon='EXPORT')
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Estructura (NUEVO — v1.4) ───────────────
+        if has_struct:
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Structure+", icon='MESH_CUBE')
+
+            row = col.row(align=True)
+            struct_btn(row, "Footing", 'FOOTING')
+            struct_btn(row, "Column", 'COLUMN')
+
+            row = col.row(align=True)
+            struct_btn(row, "Beam", 'BEAM')
+            struct_btn(row, "Ribbed", 'RIBBED_SLAB')
+
+            row = col.row(align=True)
+            struct_btn(row, "Grid", 'GRID')
+            struct_btn(row, "Levels", 'LEVELS')
+
+            layout.separator(factor=0.3)
+
         # ── SECCIÓN: Extras ──────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
@@ -974,6 +1110,12 @@ def _draw_shift_a_menu(self, context):
     layout = self.layout
     layout.operator_context = 'INVOKE_REGION_WIN'
 
+    if _op_exists("archiforge.control_center"):
+        layout.operator(
+            "archiforge.control_center",
+            text="Control Center", icon='HOME')
+        layout.separator()
+
     if _op_exists("archiforge.wall"):
         layout.operator(
             "archiforge.wall", text="Wall",
@@ -1031,6 +1173,15 @@ def _draw_shift_a_menu(self, context):
     if _op_exists("archiforge.decor"):
         layout.operator("archiforge.decor", text="Decor Item",
                         icon='LIGHT')
+    if _op_exists("archiforge.opening"):
+        layout.operator("archiforge.opening", text="Door/Window",
+                        icon='MESH_CUBE')
+    if _op_exists("archiforge.stairs"):
+        layout.operator("archiforge.stairs", text="Stair/Ramp",
+                        icon='MESH_CUBE')
+    if _op_exists("archiforge.structure"):
+        layout.operator("archiforge.structure", text="Structure",
+                        icon='MESH_CUBE')
 
 
 class ARCHIFORGE_MT_create(Menu):
@@ -1104,10 +1255,18 @@ _modules = [
     af_furniture,
     af_kitchen,
     af_decor,
+    af_openings,
+    af_stairs,
+    af_quantities,
+    af_structure,
+    af_control_center,
     af_rendering,
     af_panel,
     af_menu,
 ]
+
+# v1.5.1: los módulos que fallaron al importar quedan como None → se omiten.
+_modules = [m for m in _modules if m is not None]
 
 # Clases propias de __init__.py
 _own_classes = [

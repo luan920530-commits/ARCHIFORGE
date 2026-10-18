@@ -5,6 +5,7 @@
 # ║         Techos Paramétricos para Blender 3.3 LTS        ║
 # ║         GPL v3 — ArchiForge Devs                        ║
 # ╚══════════════════════════════════════════════════════════╝
+# v1.1 — tejas CO (zinc/eternit/española/termoacústica) + fix 3.3 + mansarda
 
 # <pep8 compliant>
 
@@ -17,7 +18,7 @@
 #  - Alero (eave) configurable
 #  - Cumbrera (ridge) configurable
 #  - Generación desde outline rectangular o polígono custom
-#  - Capa de tejas / cubierta
+#  - Capa de tejas / cubierta (9 sistemas incl. zinc y eternit)
 #  - Cornisa / fascia board
 #  - Soffit (entablado del alero)
 #  - Lucernario / skylight opcional
@@ -65,7 +66,11 @@ AF_ROOF_TYPES = [
 AF_TILE_TYPES = [
     ('NONE',     "None",     "No tile surface"),
     ('FLAT_TILE',"Flat Tile","Flat tile rows"),
-    ('ROMAN',    "Roman",    "Roman / curved tile"),
+    ('ROMAN',    "Roman",    "Roman ribs + pans"),
+    ('ESPANOLA', "Espanola", "Teja española de barril (CO)"),
+    ('ZINC',     "Zinc",     "Teja de zinc ondulada (CO)"),
+    ('ETERNIT',  "Eternit",  "Fibrocemento ondulado (CO)"),
+    ('THERMO',   "Termoacustica","UPVC / sandwich moderno (CO)"),
     ('METAL',    "Metal",    "Corrugated metal sheet"),
     ('SHINGLE',  "Shingle",  "Wood / asphalt shingles"),
 ]
@@ -224,11 +229,11 @@ class AF_RoofProperties(PropertyGroup):
     # ── Tejas / cubierta ──────────────────────────────────────
     tile_type : EnumProperty(
         name="Tile Type", items=AF_TILE_TYPES, default='NONE',
-        update=lambda s, c: af_roof_update(s, c),
+        update=lambda s, c: af_roof_tile_update(s, c),
     )
     tile_length : FloatProperty(
         name="Tile Length",
-        default=0.40, min=0.05, max=2.0, unit='LENGTH',
+        default=0.40, min=0.05, max=12.0, unit='LENGTH',
         update=lambda s, c: af_roof_update(s, c),
     )
     tile_width : FloatProperty(
@@ -299,14 +304,13 @@ class AF_RoofGenerator:
     def __init__(self, props):
         self.props = props
         self.bm    = bmesh.new()
-        self._mat  = self.bm.faces.layers.int.new("material_index")
+        # (3.3) material_index nativo, sin capa int custom
 
     # ────────────────────────────────────────────────────────
     #  UTILIDAD — Prisma rectangular
     # ────────────────────────────────────────────────────────
     def _box(self, x0, x1, y0, y1, z0, z1, mi=0):
         bm  = self.bm
-        mat = self._mat
 
         if (abs(x1-x0) < 1e-5 or abs(y1-y0) < 1e-5
                 or abs(z1-z0) < 1e-5):
@@ -329,7 +333,7 @@ class AF_RoofGenerator:
             (4,5,6,7),(0,4,7,3),(1,2,6,5),
         ]:
             f = bm.faces.new([verts[i] for i in fi])
-            f[mat] = mi
+            f.material_index = mi
 
     # ────────────────────────────────────────────────────────
     #  UTILIDAD — Cara plana desde lista de Vector3
@@ -337,14 +341,54 @@ class AF_RoofGenerator:
     def _face(self, pts3d, mi=0):
         """Crea una cara n-gon desde lista de Vector((x,y,z))."""
         bm  = self.bm
-        mat = self._mat
         if len(pts3d) < 3:
             return
         verts = [bm.verts.new(p) for p in pts3d]
         bm.verts.ensure_lookup_table()
         try:
             f = bm.faces.new(verts)
-            f[mat] = mi
+            f.material_index = mi
+        except Exception:
+            pass
+
+    def _quad(self, a, b, c, d, mi=0):
+        bm = self.bm
+        try:
+            v = [bm.verts.new(p) for p in (a, b, c, d)]
+            bm.verts.ensure_lookup_table()
+            f = bm.faces.new(v)
+            f.material_index = mi
+        except Exception:
+            pass
+
+    def _slope_tube(self, p0, p1, r, mi=0, n=8):
+        """Tubo cerrado entre 2 puntos (barriles de teja)."""
+        bm = self.bm
+        dd = p1 - p0
+        if dd.length < 1e-6:
+            return
+        dn = dd.normalized()
+        up = Vector((0, 0, 1)) if abs(dn.z) < 0.95 else Vector((0, 1, 0))
+        u = dn.cross(up).normalized()
+        v = dn.cross(u).normalized()
+        try:
+            ring = []
+            for pp in (p0, p1):
+                rr = []
+                for i in range(n):
+                    a = i * 2 * math.pi / n
+                    rr.append(bm.verts.new(
+                        pp + (u * math.cos(a) + v * math.sin(a)) * r))
+                ring.append(rr)
+            bm.verts.ensure_lookup_table()
+            r0, r1 = ring
+            for i in range(n):
+                j = (i + 1) % n
+                f = bm.faces.new([r0[i], r0[j], r1[j], r1[i]])
+                f.material_index = mi
+            for cap in (list(reversed(r0)), r1):
+                f = bm.faces.new(cap)
+                f.material_index = mi
         except Exception:
             pass
 
@@ -358,7 +402,6 @@ class AF_RoofGenerator:
         thickness_vec = Vector3 desplazamiento para cara trasera
         """
         bm  = self.bm
-        mat = self._mat
         n   = len(pts3d)
         if n < 3:
             return
@@ -370,13 +413,13 @@ class AF_RoofGenerator:
         # Cara frontal
         try:
             f = bm.faces.new(vf)
-            f[mat] = mi
+            f.material_index = mi
         except Exception:
             pass
         # Cara trasera
         try:
             f = bm.faces.new(list(reversed(vb)))
-            f[mat] = mi
+            f.material_index = mi
         except Exception:
             pass
         # Laterales
@@ -384,7 +427,7 @@ class AF_RoofGenerator:
             j = (i+1) % n
             try:
                 f = bm.faces.new([vf[i], vf[j], vb[j], vb[i]])
-                f[mat] = mi
+                f.material_index = mi
             except Exception:
                 pass
 
@@ -445,1036 +488,971 @@ class AF_RoofGenerator:
                         p.mat_soffit
                     )
 
-    # ────────────────────────────────────────────────────────
-    #  TEJAS
-    # ────────────────────────────────────────────────────────
-    def _build_tiles_on_slope(
-        self, slope_pts, length,
-        slope_height, slope_run,
-        start_x, tile_type, mi
-    ):
-        """
-        Genera tejas sobre una superficie inclinada.
-        slope_pts: [p0, p1, p2, p3] cuatro esquinas del plano inclinado
-        """
-        p = self.props
-        if tile_type == 'NONE':
+    # ═══════════════════════════════════════════════════════
+    #  TEJAS — versión 1.1 (láminas, barriles, ondas)
+    # ═══════════════════════════════════════════════════════
+
+    def _quad_slope_unit(self, orig, Ux, Uy, wid, up, thk, mi=0):
+        """Hilera unitaria de tejas planas (FLAT / SHINGLE)."""
+        n  = max(1, int(wid // up))
+        dx = wid / n
+        for i in range(n):
+            o = orig + Ux * (i * dx)
+            pts = [o + Ux * dx * 0.96,
+                   o,
+                   o + Uy * up,
+                   o + Ux * dx * 0.96 + Uy * up]
+            self._panel(pts, Vector((0, 0, -thk)), mi)
+
+    def _terrace_types(self):
+        return {'FLAT_TILE', 'SHINGLE'}
+
+    def _tube_roof(self, orig, Ux, Uy, wid, up, r, mi=0, hollow=False):
+        """Tejas medio tubo tipo española. Origen: [Vector]."""
+        n = max(2, int(wid // (r * 2)) + 1)
+        for i in range(n):
+            o = orig + Ux * (i * (wid / (n - 1)))
+            self._slope_tube(o, o + Uy * up, r, mi)
+
+    def _build_tiles_on_slope(self, A, ex, U, ex_len, slope,
+                              z0, panel='UP'):
+        """Hileras de tejas sobre una pendiente. panel UP/DN."""
+        p  = self.props
+        bm = self.bm
+
+        if p.tile_type == 'NONE':
             return
 
-        tl  = p.tile_length   * (1.0 - p.tile_overlap)
-        tw  = p.tile_width
-        tt  = p.tile_thickness
-        bm  = self.bm
-        mat = self._mat
+        if p.tile_type in {'ZINC', 'ETERNIT', 'THERMO', 'METAL'}:
+            self._build_sheet_on_quad(
+                A, ex, U, ex_len, slope, z0, panel)
+            return
 
-        # Número de filas y columnas
-        slope_length = math.sqrt(slope_height**2 + slope_run**2)
-        n_rows = max(1, int(slope_length / tl))
-        n_cols = max(1, int(length / tw))
+        op = p.tile_overlap
+        up = p.tile_length * (1 - op) if panel == 'UP' else \
+            p.tile_length * (1 - op)
+        r  = p.tile_width / 2 * 0.98 if p.tile_type == 'ESPANOLA' \
+            else p.tile_width / 2
+        cw = p.tile_width * 0.96 if p.tile_type in {
+            'ROMAN', 'ESPANOLA'} else p.tile_width * 0.9
 
-        row_step = slope_length / n_rows
-        col_step = length / n_cols
+        steps = int(slope / up) + 1
+        slope_total = p.tile_length + (steps - 1) * up
 
-        # Ángulo del plano inclinado
-        angle = math.atan2(slope_height, slope_run)
-        cos_a = math.cos(angle)
-        sin_a = math.sin(angle)
+        if p.tile_type in self._terrace_types():
+            self._quad_slope_unit(A, ex, U, ex_len, up,
+                                  p.tile_thickness, p.mat_tile)
+        elif p.tile_type in {'ROMAN', 'ESPANOLA'}:
+            self._tube_roof(A, ex, U, ex_len, up * steps, r,
+                            p.mat_tile, True)
+        else:
+            self._quad_slope_unit(A, ex, U, ex_len, up,
+                                  p.tile_thickness, p.mat_tile)
 
-        for row in range(n_rows):
-            for col in range(n_cols):
-                # Posición local en el plano de la pendiente
-                s  = row * row_step      # a lo largo de la pendiente
-                cx = start_x + col * col_step + col_step * 0.5
+        # Nudge to ridge
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
 
-                # Proyectar s sobre el plano inclinado
-                sy = s * cos_a
-                sz = s * sin_a + p.z_base
-
-                if tile_type == 'FLAT_TILE':
-                    # Teja plana: rectángulo sobre el plano inclinado
-                    self._box(
-                        cx - tw * 0.4, cx + tw * 0.4,
-                        sy, sy + tl * cos_a,
-                        sz, sz + tt + tl * sin_a,
-                        mi
-                    )
-
-                elif tile_type == 'SHINGLE':
-                    # Tablilla: aún más fina y uniforme
-                    self._box(
-                        cx - tw * 0.45, cx + tw * 0.45,
-                        sy, sy + tl * cos_a * 0.8,
-                        sz, sz + tt,
-                        mi
-                    )
-
-                elif tile_type == 'METAL':
-                    # Chapa: nervio longitudinal
-                    self._box(
-                        cx - 0.005, cx + 0.005,
-                        sy, sy + tl * cos_a,
-                        sz, sz + tt * 3,
-                        mi
-                    )
-
-    # ────────────────────────────────────────────────────────
-    #  LUCERNARIO
-    # ────────────────────────────────────────────────────────
-    def _build_skylight(self, slope_angle, slope_start_y, slope_start_z):
+    def _build_sheet_on_quad(self, A, ex, U, ex_len, slope, z0,
+                             panel='UP'):
         """
-        Genera un lucernario (velux) sobre la pendiente del techo.
-        Posición relativa al plano de la pendiente principal.
+        Láminas onduladas (ZINC/ETERNIT) o planas (THERMO/METAL).
+        A: punto inicial alero. ex: dirección a lo largo del alero.
+        U: dirección de la pendiente. ex_len: longitud del alero.
+        slope: longitud de la pendiente. panel: cuneta arriba/abajo.
         """
         p   = self.props
+        Lsh = max(0.30, p.tile_length)
+        pitch = max(0.02, p.tile_width)
+        n_sheets = max(1, int(math.ceil(ex_len / pitch)))
+        dx  = ex_len / n_sheets
+        n_rows = max(1, int(math.ceil(slope / (Lsh * 0.9))))
+        dz = slope / n_rows
+
+        wave = {'ZINC': 8, 'ETERNIT': 6}.get(p.tile_type, 0)
+        thick = p.tile_thickness if wave == 0 else 0.002
+
+        half = pitch / 2
+        for si in range(n_sheets):
+            o = A + ex * (si * dx)
+            for ri in range(n_rows):
+                q0 = o + U * (ri * dz)
+                q1 = o + ex * dx + U * (ri * dz)
+                q2 = o + ex * dx + U * ((ri + 1) * dz)
+                q3 = o + U * ((ri + 1) * dz)
+                if wave == 0:
+                    self._quad(q0, q1, q2, q3, p.mat_tile)
+                else:
+                    prev = None
+                    for k in range(wave + 1):
+                        f = k / wave
+                        zoff = Vector((0, 0, abs(math.sin(f * math.pi))
+                                       * half))
+                        b = q0.lerp(q1, f) + zoff
+                        t = q3.lerp(q2, f) + zoff
+                        if prev is not None:
+                            self._quad(prev[0], b, t, prev[1],
+                                       p.mat_tile)
+                        prev = (b, t)
+        # Cuneta
+        bm = self.bm
+        bm.verts.ensure_lookup_table()
+
+    # ────────────────────────────────────────────────────────
+    #  CUMBRERA — Remate en pico
+    # ────────────────────────────────────────────────────────
+    def _build_ridge_cap(self, ridge_start, ridge_end):
+        """Cumbrera prismática desde inicio hasta fin."""
+        p   = self.props
+        if not p.ridge_enable:
+            return
+
+        rs = Vector(ridge_start) if not isinstance(
+            ridge_start, Vector) else ridge_start
+        re = Vector(ridge_end) if not isinstance(
+            ridge_end, Vector) else ridge_end
+
+        hw = p.ridge_width / 2
+        hh = p.ridge_height
+        direction = (re - rs)
+        if direction.length < 1e-6:
+            return
+        dn = direction.normalized()
+
+        # Perpendicular horizontal
+        perp = Vector((-dn.y, dn.x, 0))
+        if perp.length < 1e-6:
+            perp = Vector((1, 0, 0))
+        perp.normalize()
+
+        # 2 pendientes de cumbrera
+        p1 = rs - perp * hw
+        p2 = rs + perp * hw
+        p3 = (rs + re) / 2 + Vector((0, 0, hh))
+        q1 = re - perp * hw
+        q2 = re + perp * hw
+        q3 = (rs + re) / 2 + Vector((0, 0, hh))
+
+        self._quad(p1, q1, q3, p3, p.mat_ridge)
+        self._quad(p3, q3, q2, p2, p.mat_ridge)
+
+        # Tapas de extremos
+        self._face([p1, p2, p3], p.mat_ridge)
+        self._face([q2, q1, q3], p.mat_ridge)
+
+    # ────────────────────────────────────────────────────────
+    #  LUCERNARIO — Ventana sobre pendiente
+    # ────────────────────────────────────────────────────────
+    def _build_skylight(self, slope_origin, slope_dir, slope_len,
+                        width_dir, width_len, z_eave):
+        """
+        Lucernario sobre una pendiente:
+          slope_origin: punto en alero (eave)
+          slope_dir:    dirección unitaria subiendo pendiente
+          slope_len:    longitud de pendiente
+          width_dir:    dirección a lo largo del alero
+          width_len:    longitud del alero
+          z_eave:       altura del alero
+        """
+        p = self.props
         if not p.skylight_enable:
             return
 
-        sw  = p.skylight_width
-        sh  = p.skylight_height
-        cx  = p.width * p.skylight_pos_x
-        pos = p.skylight_pos_y
+        cx = p.skylight_pos_x * width_len
+        cy = p.skylight_pos_y * slope_len
+        sw = min(p.skylight_width, width_len * 0.8)
+        sh = min(p.skylight_height, slope_len * 0.6)
 
-        # Proyectar posición sobre el plano inclinado
-        slope_run = p.depth * 0.5
-        cos_a = math.cos(slope_angle)
-        sin_a = math.sin(slope_angle)
+        center = slope_origin + width_dir * cx + slope_dir * cy
 
-        s   = pos * slope_run
-        py  = slope_start_y + s * cos_a
-        pz  = slope_start_z + s * sin_a
+        hw = width_dir * (sw / 2)
+        hh = slope_dir * (sh / 2)
 
-        # Frame del lucernario (inclinado)
-        frame_w = 0.06
-        gt      = 0.006
+        c00 = center - hw - hh
+        c10 = center + hw - hh
+        c11 = center + hw + hh
+        c01 = center - hw + hh
 
-        # Marco
-        self._box(
-            cx - sw*0.5 - frame_w, cx + sw*0.5 + frame_w,
-            py - frame_w, py + sh * cos_a + frame_w,
-            pz - frame_w, pz + sh * sin_a + frame_w,
-            p.mat_fascia
-        )
-
-        # Vidrio
-        self._box(
-            cx - sw*0.5, cx + sw*0.5,
-            py, py + sh * cos_a,
-            pz, pz + sh * sin_a,
+        frame_h = 0.08
+        up = Vector((0, 0, 1))
+        self._quad(
+            c00 + up * frame_h, c10 + up * frame_h,
+            c11 + up * frame_h, c01 + up * frame_h,
             p.mat_skylight
         )
 
+    # ═══════════════════════════════════════════════════════
+    #  CONSTRUCTORES POR TIPO
+    # ═══════════════════════════════════════════════════════
+
     # ────────────────────────────────────────────────────────
-    #  TIPO: FLAT — Azotea plana
+    #  1. GABLE — Dos aguas
     # ────────────────────────────────────────────────────────
-    def _build_flat(self):
+    def _build_gable(self):
         p  = self.props
         w  = p.width
         d  = p.depth
-        z  = p.z_base
-        et = p.eave_thickness
+        zb = p.z_base
         ew = p.eave_width
-        mi = p.mat_roof
+        et = p.eave_thickness
+        an = p.pitch
 
-        # Losa plana
-        self._box(
-            -ew, w + ew,
-            -ew, d + ew,
-            z - et, z,
-            mi
-        )
+        rise = math.tan(an) * (d / 2)
+        zr   = zb + rise
+        slope = (d / 2) / math.cos(an)
 
-        # Pretil / parapet (borde elevado)
-        parapet_h = 0.30
-        parapet_t = 0.15
-        for x0, x1, y0, y1 in [
-            (-ew, w + ew, -ew, -ew + parapet_t),           # Front
-            (-ew, w + ew, d + ew - parapet_t, d + ew),     # Back
-            (-ew, -ew + parapet_t, -ew, d + ew),            # Left
-            (w + ew - parapet_t, w + ew, -ew, d + ew),      # Right
-        ]:
-            self._box(x0, x1, y0, y1, z, z + parapet_h, p.mat_fascia)
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
 
-    # ────────────────────────────────────────────────────────
-    #  TIPO: GABLE — Dos aguas
-    # ────────────────────────────────────────────────────────
-    def _build_gable(self):
-        p   = self.props
-        w   = p.width
-        d   = p.depth
-        z   = p.z_base
-        et  = p.eave_thickness
-        ew  = p.eave_width
-        pitch = p.pitch
-        mi  = p.mat_roof
-        bm  = self.bm
-        mat = self._mat
+        # ── Los dos faldones (paneles) ──
+        # Trasero: desde cumbrera (y=d/2) hacia atrás (y=-ew)
+        back_top  = [Vector((x0, d/2, zr)), Vector((x1, d/2, zr)),
+                     Vector((x1, yB, zb)), Vector((x0, yB, zb))]
+        # Delantero
+        front_top = [Vector((x0, yF, zb)), Vector((x1, yF, zb)),
+                     Vector((x1, d/2, zr)), Vector((x0, d/2, zr))]
 
-        # — Altura de la cumbrera —
-        ridge_h = math.tan(pitch) * (d * 0.5)
-        z_ridge = z + ridge_h
+        thick = Vector((0, 0, -et))
+        self._panel(back_top,  thick, p.mat_roof)
+        self._panel(front_top, thick, p.mat_roof)
 
-        # — Pendiente frontal (+Y → Z) —
-        # Plano inclinado frontal con espesor
-        def slope_front():
-            # 6 puntos: 4 de la cara exterior + 2 de la cumbrera
-            pts_outer = [
-                Vector((-ew, -ew, z)),
-                Vector((w+ew, -ew, z)),
-                Vector((w+ew, d*0.5, z_ridge)),
-                Vector((-ew,  d*0.5, z_ridge)),
-            ]
-            # Desplazar hacia interior por espesor
-            off = Vector((0, et * math.sin(pitch), -et * math.cos(pitch)))
-            pts_inner = [v + off for v in pts_outer]
-            # Caras
-            self._face(pts_outer, mi)
-            self._face(list(reversed(pts_inner)), mi)
-            for i in range(len(pts_outer)):
-                j = (i+1) % len(pts_outer)
-                try:
-                    f = bm.faces.new([
-                        bm.verts.new(pts_inner[i]),
-                        bm.verts.new(pts_inner[j]),
-                        bm.verts.new(pts_outer[j]),
-                        bm.verts.new(pts_outer[i]),
-                    ])
-                    f[mat] = mi
-                except Exception:
-                    pass
+        # ── Tejas sobre los dos faldones ──
+        # Trasero: ex=+X, U va del alero (yB) a cumbrera (d/2)
+        Ub = (Vector((0, d/2 - yB, rise))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zb)), Vector((1, 0, 0)), Ub,
+            x1 - x0, slope + ew / math.cos(an), zb, 'UP')
+        # Delantero: ex=+X, U va de (yF) a (d/2)
+        Uf = (Vector((0, d/2 - yF, rise))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yF, zb)), Vector((1, 0, 0)), Uf,
+            x1 - x0, slope + ew / math.cos(an), zb, 'UP')
 
-        # Pendiente delantera
-        pts_f = [
-            Vector((-ew, -ew, z)),
-            Vector((w+ew, -ew, z)),
-            Vector((w+ew, d*0.5, z_ridge)),
-            Vector((-ew,  d*0.5, z_ridge)),
-        ]
-        nf = Vector((0.0, math.cos(pitch), math.sin(pitch))).normalized()
-        off_f = -nf * et
+        # ── Hastiales (gable ends, triángulos) ──
+        self._face([Vector((0, 0, zb)),
+                    Vector((0, d, zb)),
+                    Vector((0, d/2, zr))], p.mat_roof)
+        self._face([Vector((w, d, zb)),
+                    Vector((w, 0, zb)),
+                    Vector((w, d/2, zr))], p.mat_roof)
 
-        self._panel(pts_f, off_f, mi)
+        # ── Cumbrera ──
+        self._build_ridge_cap(Vector((x0, d/2, zr)),
+                              Vector((x1, d/2, zr)))
 
-        # Pendiente trasera
-        pts_b = [
-            Vector((w+ew, d+ew, z)),
-            Vector((-ew, d+ew, z)),
-            Vector((-ew, d*0.5, z_ridge)),
-            Vector((w+ew, d*0.5, z_ridge)),
-        ]
-        nb = Vector((0.0, -math.cos(pitch), math.sin(pitch))).normalized()
-        off_b = -nb * et
-        self._panel(pts_b, off_b, mi)
+        # ── Fascia / Soffit ──
+        self._build_eave_details([(yB, zb), (yF, zb)], axis='X')
 
-        # — Hastiales (Gable ends) —
-        # Frontal (y=-ew → -ew+fascia)
-        self._face([
-            Vector((-ew, -ew, z)),
-            Vector((w+ew, -ew, z)),
-            Vector((w*0.5, -ew, z_ridge)),  # corregido: punta en centro
-        ], mi)
-        # Trasera
-        self._face([
-            Vector((w+ew, d+ew, z)),
-            Vector((-ew, d+ew, z)),
-            Vector((w*0.5, d+ew, z_ridge)),
-        ], mi)
-
-        # — Cumbrera (ridge cap) —
-        if p.ridge_enable:
-            rw = p.ridge_width * 0.5
-            rh = p.ridge_height
-            self._box(
-                -rw, w + rw,
-                d*0.5 - rw, d*0.5 + rw,
-                z_ridge, z_ridge + rh,
-                p.mat_ridge
-            )
-
-        # — Tejas —
-        if p.tile_type != 'NONE':
-            # Pendiente delantera
-            self._build_tiles_on_slope(
-                pts_f, w + ew*2, ridge_h, d*0.5,
-                -ew, p.tile_type, p.mat_tile
-            )
-            # Pendiente trasera
-            self._build_tiles_on_slope(
-                pts_b, w + ew*2, ridge_h, d*0.5,
-                -ew, p.tile_type, p.mat_tile
-            )
-
-        # — Fascia / soffit —
-        self._build_eave_details(
-            [(-ew, z), (d+ew, z)], axis='X'
-        )
-
-        # — Lucernario —
-        if p.skylight_enable:
-            self._build_skylight(pitch, -ew, z)
+        # ── Lucernario (faldón delantero) ──
+        self._build_skylight(
+            Vector((x0, yF, zb)), Uf,
+            slope + ew / math.cos(an),
+            Vector((1, 0, 0)), x1 - x0, zb)
 
     # ────────────────────────────────────────────────────────
-    #  TIPO: HIP — Cuatro aguas
-    # ────────────────────────────────────────────────────────
-    def _build_hip(self):
-        p   = self.props
-        w   = p.width
-        d   = p.depth
-        z   = p.z_base
-        et  = p.eave_thickness
-        ew  = p.eave_width
-        pitch = p.pitch
-        mi  = p.mat_roof
-        bm  = self.bm
-        mat = self._mat
-
-        # Altura de la cumbrera (basada en la dimensión menor)
-        half_min = min(w, d) * 0.5
-        ridge_h  = math.tan(pitch) * half_min
-        z_ridge  = z + ridge_h
-
-        # Longitud de la cumbrera (si w > d, hay cumbrera horizontal)
-        if w >= d:
-            ridge_len = (w - d) * 0.5
-            # Cumbrera central horizontal en X
-            ridge_x0 = ridge_len
-            ridge_x1 = w - ridge_len
-        else:
-            ridge_len = 0.0
-            ridge_x0  = w * 0.5
-            ridge_x1  = w * 0.5
-
-        # — Pendiente frontal (triángulo o trapecio) —
-        if ridge_len > 0.001:
-            pts_f = [
-                Vector((-ew, -ew, z)),
-                Vector((w+ew, -ew, z)),
-                Vector((ridge_x1, d*0.5, z_ridge)),
-                Vector((ridge_x0, d*0.5, z_ridge)),
-            ]
-        else:
-            pts_f = [
-                Vector((-ew, -ew, z)),
-                Vector((w+ew, -ew, z)),
-                Vector((w*0.5, d*0.5, z_ridge)),
-            ]
-        nf = Vector((0.0, math.cos(pitch), math.sin(pitch))).normalized()
-        self._panel(pts_f, -nf*et, mi)
-
-        # — Pendiente trasera —
-        if ridge_len > 0.001:
-            pts_b = [
-                Vector((w+ew, d+ew, z)),
-                Vector((-ew, d+ew, z)),
-                Vector((ridge_x0, d*0.5, z_ridge)),
-                Vector((ridge_x1, d*0.5, z_ridge)),
-            ]
-        else:
-            pts_b = [
-                Vector((w+ew, d+ew, z)),
-                Vector((-ew, d+ew, z)),
-                Vector((w*0.5, d*0.5, z_ridge)),
-            ]
-        nb = Vector((0.0, -math.cos(pitch), math.sin(pitch))).normalized()
-        self._panel(pts_b, -nb*et, mi)
-
-        # — Pendiente lateral izquierda —
-        pts_l = [
-            Vector((-ew, -ew, z)),
-            Vector((-ew, d+ew, z)),
-            Vector((ridge_x0, d*0.5, z_ridge)),
-        ]
-        if ridge_len < 0.001:
-            nl = Vector((-math.cos(pitch), 0, math.sin(pitch))).normalized()
-            self._panel(pts_l, nl*et, mi)
-        else:
-            pts_l = [
-                Vector((-ew, -ew, z)),
-                Vector((-ew, d+ew, z)),
-                Vector((ridge_x0, d*0.5, z_ridge)),
-            ]
-            nl = Vector((-math.cos(pitch), 0, math.sin(pitch))).normalized()
-            self._panel(pts_l, nl*et, mi)
-
-        # — Pendiente lateral derecha —
-        pts_r = [
-            Vector((w+ew, d+ew, z)),
-            Vector((w+ew, -ew, z)),
-            Vector((ridge_x1, d*0.5, z_ridge)),
-        ]
-        nr = Vector((math.cos(pitch), 0, math.sin(pitch))).normalized()
-        self._panel(pts_r, -nr*et, mi)
-
-        # — Cumbrera —
-        if p.ridge_enable and ridge_len > 0.001:
-            rw = p.ridge_width * 0.5
-            rh = p.ridge_height
-            self._box(
-                ridge_x0 - rw, ridge_x1 + rw,
-                d*0.5 - rw, d*0.5 + rw,
-                z_ridge, z_ridge + rh,
-                p.mat_ridge
-            )
-
-        # — Tejas —
-        if p.tile_type != 'NONE':
-            self._build_tiles_on_slope(
-                pts_f, w+ew*2, ridge_h, half_min,
-                -ew, p.tile_type, p.mat_tile
-            )
-
-        # — Fascia —
-        self._build_eave_details(
-            [(-ew, z), (d+ew, z)], axis='X'
-        )
-
-        # — Lucernario —
-        if p.skylight_enable:
-            self._build_skylight(pitch, -ew, z)
-
-    # ────────────────────────────────────────────────────────
-    #  TIPO: SHED — Un agua
+    #  2. SHED — Una agua
     # ────────────────────────────────────────────────────────
     def _build_shed(self):
-        p     = self.props
-        w     = p.width
-        d     = p.depth
-        z     = p.z_base
-        et    = p.eave_thickness
-        ew    = p.eave_width
-        pitch = p.pitch
-        mi    = p.mat_roof
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        an = p.pitch
 
-        # Altura en la parte alta (lado Y=d)
-        ridge_h = math.tan(pitch) * d
-        z_high  = z + ridge_h
+        rise  = math.tan(an) * d
+        ztop  = zb + rise
+        slope = d / math.cos(an)
 
-        # Pendiente única (de Y=0 a Y=d)
-        pts = [
-            Vector((-ew,   -ew, z)),
-            Vector((w+ew,  -ew, z)),
-            Vector((w+ew, d+ew, z_high)),
-            Vector((-ew,  d+ew, z_high)),
-        ]
-        n   = Vector((0.0, -math.cos(pitch), math.sin(pitch))).normalized()
-        self._panel(pts, n * et, mi)
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
 
-        # Hastiales triangulares
-        self._face([
-            Vector((-ew, -ew, z)),
-            Vector((-ew, d+ew, z_high)),
-            Vector((-ew, -ew, z_high)),
-        ], mi)
-        self._face([
-            Vector((w+ew, -ew, z)),
-            Vector((w+ew, -ew, z_high)),
-            Vector((w+ew, d+ew, z_high)),
-        ], mi)
-
-        # Fascia / soffit
-        self._build_eave_details([(-ew, z), (d+ew, z_high)], axis='X')
+        top = [Vector((x0, yB, zb)), Vector((x1, yB, zb)),
+               Vector((x1, yF, ztop + math.tan(an) * ew * 2)),
+               Vector((x0, yF, ztop + math.tan(an) * ew * 2))]
+        zb_low = zb
+        # Ajuste: el borde bajo incluye alero
+        zB = zb - math.tan(an) * ew
+        top = [Vector((x0, yB, zB)), Vector((x1, yB, zB)),
+               Vector((x1, yF, ztop + math.tan(an) * ew)),
+               Vector((x0, yF, ztop + math.tan(an) * ew))]
+        self._panel(top, Vector((0, 0, -et)), p.mat_roof)
 
         # Tejas
-        if p.tile_type != 'NONE':
-            self._build_tiles_on_slope(
-                pts, w+ew*2, ridge_h, d,
-                -ew, p.tile_type, p.mat_tile
-            )
+        U = (Vector((0, (yF - yB), (ztop + math.tan(an) * ew) - zB))
+             ).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zB)), Vector((1, 0, 0)), U,
+            x1 - x0, slope + 2 * ew / math.cos(an), zB, 'UP')
 
-        # Lucernario
-        if p.skylight_enable:
-            self._build_skylight(pitch, -ew, z)
+        # Muros laterales (triángulos) y trasero alto
+        self._face([Vector((0, 0, zb_low)),
+                    Vector((0, d, ztop)),
+                    Vector((0, 0, ztop))], p.mat_roof)
+        self._face([Vector((w, 0, zb_low)),
+                    Vector((w, 0, ztop)),
+                    Vector((w, d, ztop))], p.mat_roof)
+        self._face([Vector((0, d, ztop)), Vector((w, d, ztop)),
+                    Vector((w, d, zb_low)),
+                    Vector((0, d, zb_low))], p.mat_roof)
 
-    # ────────────────────────────────────────────────────────
-    #  TIPO: MANSARD — Doble pendiente (mansarda)
-    # ────────────────────────────────────────────────────────
-    def _build_mansard(self):
-        p   = self.props
-        w   = p.width
-        d   = p.depth
-        z   = p.z_base
-        et  = p.eave_thickness
-        ew  = p.eave_width
-        bh  = p.mansard_break   # altura del quiebre
-        pl  = p.mansard_pitch_lower
-        pu  = p.pitch
-        mi  = p.mat_roof
+        self._build_eave_details([(yB, zB)], axis='X')
 
-        # — Calcular quiebre —
-        run_lower = bh / math.tan(pl)   # retroceso horizontal de la pendiente baja
-        z_break   = z + bh
-
-        # Nivel del quiebre en planta
-        x_break_l = run_lower
-        x_break_r = w - run_lower
-        y_break_f = run_lower
-        y_break_b = d - run_lower
-
-        # Altura superior
-        upper_run = min(x_break_r - x_break_l, y_break_b - y_break_f) * 0.5
-        z_ridge   = z_break + math.tan(pu) * upper_run
-
-        # — Pendiente baja frontal (empinada) —
-        pts_lf = [
-            Vector((-ew,   -ew,   z)),
-            Vector((w+ew,  -ew,   z)),
-            Vector((x_break_r, y_break_f, z_break)),
-            Vector((x_break_l, y_break_f, z_break)),
-        ]
-        nf_low = Vector((0.0, math.cos(pl), math.sin(pl))).normalized()
-        self._panel(pts_lf, -nf_low * et, mi)
-
-        # — Pendiente baja trasera —
-        pts_lb = [
-            Vector((w+ew, d+ew, z)),
-            Vector((-ew,  d+ew, z)),
-            Vector((x_break_l, y_break_b, z_break)),
-            Vector((x_break_r, y_break_b, z_break)),
-        ]
-        nb_low = Vector((0.0, -math.cos(pl), math.sin(pl))).normalized()
-        self._panel(pts_lb, -nb_low * et, mi)
-
-        # — Pendiente baja lateral izquierda —
-        pts_ll = [
-            Vector((-ew, -ew, z)),
-            Vector((-ew, d+ew, z)),
-            Vector((x_break_l, y_break_b, z_break)),
-            Vector((x_break_l, y_break_f, z_break)),
-        ]
-        nl_low = Vector((-math.cos(pl), 0, math.sin(pl))).normalized()
-        self._panel(pts_ll, nl_low * et, mi)
-
-        # — Pendiente baja lateral derecha —
-        pts_lr = [
-            Vector((w+ew, d+ew, z)),
-            Vector((w+ew, -ew, z)),
-            Vector((x_break_r, y_break_f, z_break)),
-            Vector((x_break_r, y_break_b, z_break)),
-        ]
-        nr_low = Vector((math.cos(pl), 0, math.sin(pl))).normalized()
-        self._panel(pts_lr, -nr_low * et, mi)
-
-        # — Parte superior: techo a cuatro aguas sobre la mansarda —
-        # Llamar _build_hip con dimensiones reducidas
-        # Guardar props temporales
-        orig_w, orig_d, orig_z, orig_pitch = (
-            p.width, p.depth, p.z_base, p.pitch
-        )
-        p.width  = x_break_r - x_break_l
-        p.depth  = y_break_b - y_break_f
-        p.z_base = z_break
-        p.pitch  = pu
-
-        # Ajustar origen para la parte superior
-        # (usar transform después)
-        sub_gen = AF_RoofGenerator(p)
-        sub_gen._build_hip()
-        sub_bm = sub_gen.bm
-
-        # Trasladar la geometría superior al lugar correcto
-        offset = Vector((x_break_l, y_break_f, 0.0))
-        for v in sub_bm.verts:
-            v.co += offset
-
-        sub_bm.to_mesh(bpy.data.meshes.new("__tmp_mansard__"))
-        # Fusionar con el bmesh principal
-        bmesh.ops.duplicate(
-            self.bm,
-            geom = list(sub_bm.faces) + list(sub_bm.verts) + list(sub_bm.edges)
-        )
-        sub_bm.free()
-
-        # Restaurar props
-        p.width, p.depth, p.z_base, p.pitch = (
-            orig_w, orig_d, orig_z, orig_pitch
-        )
-
-        # — Fascia baja —
-        self._build_eave_details([(-ew, z), (d+ew, z)], axis='X')
-
-        # — Cumbrera —
-        if p.ridge_enable:
-            cx0 = x_break_l + upper_run
-            cx1 = x_break_r - upper_run
-            if cx1 > cx0:
-                rw = p.ridge_width * 0.5
-                self._box(
-                    cx0 - rw, cx1 + rw,
-                    (y_break_f + y_break_b)*0.5 - rw,
-                    (y_break_f + y_break_b)*0.5 + rw,
-                    z_ridge, z_ridge + p.ridge_height,
-                    p.mat_ridge
-                )
+        self._build_skylight(
+            Vector((x0, yB, zB)), U,
+            slope + 2 * ew / math.cos(an),
+            Vector((1, 0, 0)), x1 - x0, zB)
 
     # ────────────────────────────────────────────────────────
-    #  TIPO: BUTTERFLY — Mariposa (V)
+    #  3. HIP — Cuatro aguas (limatesas)
     # ────────────────────────────────────────────────────────
-    def _build_butterfly(self):
-        p     = self.props
-        w     = p.width
-        d     = p.depth
-        z     = p.z_base
-        et    = p.eave_thickness
-        ew    = p.eave_width
-        pitch = p.pitch
-        mi    = p.mat_roof
+    def _build_hip(self):
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        an = p.pitch
 
-        # La cumbrera está en el centro pero más BAJA
-        valley_drop = math.tan(pitch) * (d * 0.5)
-        z_valley    = z - valley_drop
-        z_high_f    = z
-        z_high_b    = z
+        rise = math.tan(an) * (min(w, d) / 2)
+        zr   = zb + rise
 
-        # — Pendiente frontal (desciende hacia el centro) —
-        pts_f = [
-            Vector((-ew, -ew, z_high_f)),
-            Vector((w+ew, -ew, z_high_f)),
-            Vector((w+ew, d*0.5, z_valley)),
-            Vector((-ew, d*0.5, z_valley)),
-        ]
-        nf = Vector((0.0, math.cos(pitch), -math.sin(pitch))).normalized()
-        self._panel(pts_f, -nf * et, mi)
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
+        cx0, cx1 = (w - d) / 2 if w >= d else 0, \
+            (w + d) / 2 if w >= d else w
+        if w < d:
+            cx0, cx1 = 0, w
+        # Cumbrera horizontal centrada
+        if w >= d:
+            r0 = Vector((cx0, d / 2, zr))
+            r1 = Vector((cx1, d / 2, zr))
+        else:
+            r0 = Vector((w / 2, (d - w) / 2, zr))
+            r1 = Vector((w / 2, (d + w) / 2, zr))
 
-        # — Pendiente trasera —
-        pts_b = [
-            Vector((w+ew, d+ew, z_high_b)),
-            Vector((-ew, d+ew, z_high_b)),
-            Vector((-ew, d*0.5, z_valley)),
-            Vector((w+ew, d*0.5, z_valley)),
-        ]
-        nb = Vector((0.0, -math.cos(pitch), -math.sin(pitch))).normalized()
-        self._panel(pts_b, -nb * et, mi)
+        th = Vector((0, 0, -et))
 
-        # Hastiales
-        self._face([
-            Vector((-ew, -ew, z_high_f)),
-            Vector((-ew, d*0.5, z_valley)),
-            Vector((-ew, d+ew, z_high_b)),
-        ], mi)
-        self._face([
-            Vector((w+ew, d+ew, z_high_b)),
-            Vector((w+ew, d*0.5, z_valley)),
-            Vector((w+ew, -ew, z_high_f)),
-        ], mi)
+        if w >= d:
+            # Faldones front/back trapezoidales
+            self._panel([Vector((x0, yB, zb)), Vector((x1, yB, zb)),
+                         r1, r0], th, p.mat_roof)
+            self._panel([r0, r1, Vector((x1, yF, zb)),
+                         Vector((x0, yF, zb))], th, p.mat_roof)
+            # Laterales triangulares
+            self._panel([Vector((x0, yB, zb)),
+                         r0,
+                         Vector((x0, yF, zb))], th, p.mat_roof)
+            self._panel([r1,
+                         Vector((x1, yB, zb)),
+                         Vector((x1, yF, zb))], th, p.mat_roof)
+        else:
+            self._panel([Vector((x0, yB, zb)), Vector((x1, yB, zb)),
+                         r1, r0], th, p.mat_roof)
+            self._panel([r0, r1, Vector((x1, yF, zb)),
+                         Vector((x0, yF, zb))], th, p.mat_roof)
+            self._panel([Vector((x0, yB, zb)),
+                         r0,
+                         Vector((x0, yF, zb))], th, p.mat_roof)
+            self._panel([r1,
+                         Vector((x1, yB, zb)),
+                         Vector((x1, yF, zb))], th, p.mat_roof)
 
-        # Fascia (en los bordes altos)
-        self._build_eave_details([(-ew, z_high_f), (d+ew, z_high_b)], 'X')
+        # Tejas: faldones principales (front/back) + laterales
+        slope_fb = (d / 2 + ew) / math.cos(an)
+        Ub = (Vector((0, d / 2 - yB, rise))).normalized()
+        Uf = (Vector((0, d / 2 - yF, rise))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zb)), Vector((1, 0, 0)), Ub,
+            x1 - x0, slope_fb, zb, 'UP')
+        self._build_tiles_on_slope(
+            Vector((x0, yF, zb)), Vector((1, 0, 0)), Uf,
+            x1 - x0, slope_fb, zb, 'UP')
+        # Laterales (U a lo largo de X)
+        slope_lr = (w / 2 + ew) / math.cos(an)
+        Ul = (Vector((w / 2 - x0, 0, rise))).normalized()
+        Ur = (Vector((w / 2 - x1, 0, rise))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zb)), Vector((0, 1, 0)), Ul,
+            yF - yB, slope_lr, zb, 'UP')
+        self._build_tiles_on_slope(
+            Vector((x1, yB, zb)), Vector((0, 1, 0)), Ur,
+            yF - yB, slope_lr, zb, 'UP')
 
-        # Canalón en el valle (canal)
-        canal_w = 0.15
-        canal_h = 0.08
-        self._box(
-            -ew, w+ew,
-            d*0.5 - canal_w*0.5, d*0.5 + canal_w*0.5,
-            z_valley - canal_h, z_valley,
-            p.mat_fascia
-        )
+        self._build_ridge_cap(r0, r1)
+        self._build_eave_details([(yB, zb), (yF, zb)], axis='X')
+
+        self._build_skylight(
+            Vector((x0, yF, zb)), Uf, slope_fb,
+            Vector((1, 0, 0)), x1 - x0, zb)
 
     # ────────────────────────────────────────────────────────
-    #  TIPO: SALTBOX — Asimétrico
+    #  4. SALTBOX — Dos aguas asimétricas
     # ────────────────────────────────────────────────────────
     def _build_saltbox(self):
-        p      = self.props
-        w      = p.width
-        d      = p.depth
-        z      = p.z_base
-        et     = p.eave_thickness
-        ew     = p.eave_width
-        pitch  = p.pitch
-        pitchb = p.pitch_back
-        mi     = p.mat_roof
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        anF = p.pitch
+        anB = p.pitch_back
 
-        # La cumbrera está desplazada hacia el frente
-        # Eje de la cumbrera en Y = d * 0.35 (aprox saltbox)
-        ridge_y  = d * 0.35
-        ridge_h  = math.tan(pitch) * ridge_y
-        z_ridge  = z + ridge_h
+        # Cumbrera descentrada: 1/3 frontal
+        yc = d * 0.35
+        zc = zb + math.tan(anF) * (d - yc)
+        # Ajuste trasero para empatar altura
+        riseB = zc - zb
+        yB, yF = -ew, d + ew
+        x0, x1 = -ew, w + ew
+        # Extensión trasera más larga
+        yB2 = yB - d * 0.15
 
-        # Pendiente frontal (corta y empinada)
-        pts_f = [
-            Vector((-ew, -ew, z)),
-            Vector((w+ew, -ew, z)),
-            Vector((w+ew, ridge_y, z_ridge)),
-            Vector((-ew, ridge_y, z_ridge)),
-        ]
-        nf = Vector((0.0, math.cos(pitch), math.sin(pitch))).normalized()
-        self._panel(pts_f, -nf * et, mi)
+        th = Vector((0, 0, -et))
+        # Faldón trasero largo
+        self._panel([Vector((x0, yc, zc)), Vector((x1, yc, zc)),
+                     Vector((x1, yB2, zb - math.tan(anB) * d * 0.15)),
+                     Vector((x0, yB2, zb - math.tan(anB) * d * 0.15))],
+                    th, p.mat_roof)
+        # Faldón delantero corto
+        self._panel([Vector((x0, yF, zb)), Vector((x1, yF, zb)),
+                     Vector((x1, yc, zc)), Vector((x0, yc, zc))],
+                    th, p.mat_roof)
 
-        # Pendiente trasera (larga y suave)
-        pts_b = [
-            Vector((w+ew, d+ew, z)),
-            Vector((-ew, d+ew, z)),
-            Vector((-ew, ridge_y, z_ridge)),
-            Vector((w+ew, ridge_y, z_ridge)),
-        ]
-        nb = Vector((0.0, -math.cos(pitchb), math.sin(pitchb))).normalized()
-        self._panel(pts_b, -nb * et, mi)
+        zbB = zb - math.tan(anB) * d * 0.15
+        Ub = (Vector((0, yc - yB2, zc - zbB))).normalized()
+        Uf = (Vector((0, yc - yF, zc - zb))).normalized()
+        slopeB = math.hypot(yc - yB2, zc - zbB)
+        slopeF = math.hypot(yc - yF, zc - zb)
+        self._build_tiles_on_slope(
+            Vector((x0, yB2, zbB)), Vector((1, 0, 0)), Ub,
+            x1 - x0, slopeB, zbB, 'UP')
+        self._build_tiles_on_slope(
+            Vector((x0, yF, zb)), Vector((1, 0, 0)), Uf,
+            x1 - x0, slopeF, zb, 'UP')
 
-        # Hastiales asimétricos
-        self._face([
-            Vector((-ew, -ew, z)),
-            Vector((-ew, ridge_y, z_ridge)),
-            Vector((-ew, d+ew, z)),
-        ], mi)
-        self._face([
-            Vector((w+ew, d+ew, z)),
-            Vector((w+ew, ridge_y, z_ridge)),
-            Vector((w+ew, -ew, z)),
-        ], mi)
+        # Hastiales
+        self._face([Vector((0, 0, zb)), Vector((0, d, zb)),
+                    Vector((0, yc, zc))], p.mat_roof)
+        self._face([Vector((w, d, zb)), Vector((w, 0, zb)),
+                    Vector((w, yc, zc))], p.mat_roof)
 
-        # Cumbrera
-        if p.ridge_enable:
-            rw = p.ridge_width * 0.5
-            rh = p.ridge_height
-            self._box(
-                -rw, w+rw,
-                ridge_y - rw, ridge_y + rw,
-                z_ridge, z_ridge + rh,
-                p.mat_ridge
-            )
+        self._build_ridge_cap(Vector((x0, yc, zc)),
+                              Vector((x1, yc, zc)))
+        self._build_eave_details([(yB2, zbB), (yF, zb)], axis='X')
 
-        self._build_eave_details([(-ew, z), (d+ew, z)], 'X')
-
-        if p.skylight_enable:
-            self._build_skylight(pitch, -ew, z)
+        self._build_skylight(
+            Vector((x0, yF, zb)), Uf, slopeF,
+            Vector((1, 0, 0)), x1 - x0, zb)
 
     # ────────────────────────────────────────────────────────
-    #  TIPO: VAULT — Bóveda de cañón
+    #  5. BUTTERFLY — Alas invertidas (valle central)
+    # ────────────────────────────────────────────────────────
+    def _build_butterfly(self):
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        an = p.pitch
+
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
+        yc = d / 2
+        # Bordes altos, centro bajo
+        zEdge = zb + math.tan(an) * (d / 2)
+        zv = zb  # valle
+
+        th = Vector((0, 0, -et))
+        # Ala trasera: alta en yB, baja en yc
+        self._panel([Vector((x0, yB, zEdge)), Vector((x1, yB, zEdge)),
+                     Vector((x1, yc, zv)), Vector((x0, yc, zv))],
+                    th, p.mat_roof)
+        # Ala delantera
+        self._panel([Vector((x0, yc, zv)), Vector((x1, yc, zv)),
+                     Vector((x1, yF, zEdge)), Vector((x0, yF, zEdge))],
+                    th, p.mat_roof)
+
+        # Tejas: del valle hacia afuera (panel DN)
+        Ub = (Vector((0, yB - yc, zEdge - zv))).normalized()
+        Uf = (Vector((0, yF - yc, zEdge - zv))).normalized()
+        slope = math.hypot(d / 2 + ew, zEdge - zv)
+        self._build_tiles_on_slope(
+            Vector((x0, yc, zv)), Vector((1, 0, 0)), Ub,
+            x1 - x0, slope, zv, 'DN')
+        self._build_tiles_on_slope(
+            Vector((x0, yc, zv)), Vector((1, 0, 0)), Uf,
+            x1 - x0, slope, zv, 'DN')
+
+        # Tímpanos laterales
+        self._face([Vector((0, 0, zEdge)), Vector((0, d, zEdge)),
+                    Vector((0, yc, zv))], p.mat_roof)
+        self._face([Vector((w, d, zEdge)), Vector((w, 0, zEdge)),
+                    Vector((w, yc, zv))], p.mat_roof)
+
+        self._build_eave_details([(yB, zEdge), (yF, zEdge)],
+                                 axis='X')
+
+    # ────────────────────────────────────────────────────────
+    #  6. MANSARD — Cubierta francesa (2 pendientes/lado)
+    #  v1.1: superior directo con _panel (sin sub-bmesh,
+    #        sin mutación temporal de props → sin recursión).
+    # ────────────────────────────────────────────────────────
+    def _build_mansard(self):
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        anL = p.mansard_pitch_lower
+        anU = p.pitch
+        hb  = p.mansard_break
+
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
+        runL = hb / math.tan(anL)
+        zbk = zb + hb  # altura del quiebre
+
+        # Plataforma superior: gable a escala reducida
+        w2 = max(0.5, w - runL * 2)
+        d2 = max(0.5, d - runL * 2)
+        ox = (w - w2) / 2
+        oz = zbk
+        rise2 = math.tan(anU) * (d2 / 2)
+        zr2 = oz + rise2
+
+        th = Vector((0, 0, -et))
+
+        # ── Taludes inferiores (4 lados, empinados) ──
+        # Trasero
+        self._panel([Vector((x0, yB, zb)), Vector((x1, yB, zb)),
+                     Vector((ox + w2 + runL, oz, zbk)),
+                     Vector((ox - runL, oz, zbk))],
+                    th, p.mat_roof)
+        # Delantero
+        self._panel([Vector((ox - runL, oz + d2, zbk)),
+                     Vector((ox + w2 + runL, oz + d2, zbk)),
+                     Vector((x1, yF, zb)), Vector((x0, yF, zb))],
+                    th, p.mat_roof)
+        # Izquierdo
+        self._panel([Vector((x0, yB, zb)),
+                     Vector((ox - runL, oz, zbk)),
+                     Vector((ox - runL, oz + d2, zbk)),
+                     Vector((x0, yF, zb))],
+                    th, p.mat_roof)
+        # Derecho
+        self._panel([Vector((ox + w2 + runL, oz, zbk)),
+                     Vector((x1, yB, zb)), Vector((x1, yF, zb)),
+                     Vector((ox + w2 + runL, oz + d2, zbk))],
+                    th, p.mat_roof)
+
+        # ── Cubierta superior (gable directo) ──
+        yc2 = oz + d2 / 2 if False else (d / 2)
+        self._panel([Vector((ox - runL, yc2, zr2)),
+                     Vector((ox + w2 + runL, yc2, zr2)),
+                     Vector((ox + w2 + runL, oz + d2, zbk)),
+                     Vector((ox - runL, oz + d2, zbk))],
+                    th, p.mat_roof)
+        self._panel([Vector((ox - runL, oz, zbk)),
+                     Vector((ox + w2 + runL, oz, zbk)),
+                     Vector((ox + w2 + runL, yc2, zr2)),
+                     Vector((ox - runL, yc2, zr2))],
+                    th, p.mat_roof)
+
+        # ── Tejas: taludes inferiores + superior ──
+        slopeL = hb / math.sin(anL)
+        Ub = (Vector((0, oz - yB, hb))).normalized()
+        Uf = (Vector((0, (oz + d2) - yF, hb))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zb)), Vector((1, 0, 0)), Ub,
+            x1 - x0, slopeL, zb, 'UP')
+        self._build_tiles_on_slope(
+            Vector((x0, yF, zb)), Vector((1, 0, 0)), Uf,
+            x1 - x0, slopeL, zb, 'UP')
+        Ul = (Vector((ox - runL - x0, 0, hb))).normalized()
+        Ur = (Vector((ox + w2 + runL - x1, 0, hb))).normalized()
+        self._build_tiles_on_slope(
+            Vector((x0, yB, zb)), Vector((0, 1, 0)), Ul,
+            yF - yB, slopeL, zb, 'UP')
+        self._build_tiles_on_slope(
+            Vector((x1, yB, zb)), Vector((0, 1, 0)), Ur,
+            yF - yB, slopeL, zb, 'UP')
+        slopeU = (d2 / 2) / math.cos(anU)
+        Uu = (Vector((0, d2 / 2, rise2))).normalized()
+        self._build_tiles_on_slope(
+            Vector((ox - runL, oz, zbk)), Vector((1, 0, 0)), Uu,
+            w2 + runL * 2, slopeU, zbk, 'UP')
+        Ud = (Vector((0, -(d2 / 2), rise2))).normalized()
+        self._build_tiles_on_slope(
+            Vector((ox - runL, oz + d2, zbk)), Vector((1, 0, 0)),
+            Ud, w2 + runL * 2, slopeU, zbk, 'UP')
+
+        self._build_ridge_cap(
+            Vector((ox - runL, yc2, zr2)),
+            Vector((ox + w2 + runL, yc2, zr2)))
+        self._build_eave_details([(yB, zb), (yF, zb)], axis='X')
+
+    # ────────────────────────────────────────────────────────
+    #  7. VAULT — Bóveda de cañón
     # ────────────────────────────────────────────────────────
     def _build_vault(self):
-        p    = self.props
-        w    = p.width
-        d    = p.depth
-        z    = p.z_base
-        et   = p.eave_thickness
-        ew   = p.eave_width
-        segs = p.vault_segments
-        mi   = p.mat_roof
-        bm   = self.bm
-        mat  = self._mat
+        p  = self.props
+        w  = p.width
+        d  = p.depth
+        zb = p.z_base
+        ew = p.eave_width
+        et = p.eave_thickness
+        an = p.pitch
+        n  = max(4, p.vault_segments)
 
-        # Radio del arco = la mitad del ancho
-        r        = w * 0.5
-        cx       = w * 0.5   # centro del arco en X
-        a_start  = 0.0
-        a_end    = math.pi
-        a_step   = (a_end - a_start) / segs
+        rise = math.tan(an) * (d / 2)
+        zr   = zb + rise
 
-        for seg in range(segs):
-            a0 = a_start + seg * a_step
-            a1 = a_start + (seg+1) * a_step
+        x0, x1 = -ew, w + ew
+        yB, yF = -ew, d + ew
 
-            # Exterior del arco
-            x0_out = cx + (r + et) * math.cos(a0)
-            z0_out = z + (r + et) * math.sin(a0)
-            x1_out = cx + (r + et) * math.cos(a1)
-            z1_out = z + (r + et) * math.sin(a1)
+        # Arco parabólico: n+1 puntos de yB a yF
+        def arc(t):
+            y = yB + (yF - yB) * t
+            f = 1 - (2 * t - 1) ** 2
+            return y, zb + (zr - zb) * f
 
-            # Interior
-            x0_in  = cx + r * math.cos(a0)
-            z0_in  = z + r * math.sin(a0)
-            x1_in  = cx + r * math.cos(a1)
-            z1_in  = z + r * math.sin(a1)
+        th = Vector((0, 0, -et))
+        prev = None
+        for i in range(n + 1):
+            y, z = arc(i / n)
+            cur = (Vector((x0, y, z)), Vector((x1, y, z)))
+            if prev is not None:
+                self._panel([prev[0], prev[1], cur[1], cur[0]],
+                            th, p.mat_roof)
+            prev = cur
 
-            # — Franja de la bóveda (extruida en Y) —
-            y0 = -ew
-            y1 = d + ew
+        # Tímpanos (arco aproximado con fan de n segmentos)
+        for xx in (0, w):
+            c = Vector((xx, d / 2, zb))
+            pts = []
+            for i in range(n + 1):
+                t = i / n
+                y = (d + ew * 2) * t - ew
+                f = 1 - (2 * t - 1) ** 2
+                pts.append(Vector((xx, y, zb + (zr - zb) * f)))
+            for i in range(len(pts) - 1):
+                if xx == 0:
+                    self._face([c, pts[i + 1], pts[i]],
+                               p.mat_roof)
+                else:
+                    self._face([c, pts[i], pts[i + 1]],
+                               p.mat_roof)
 
-            verts = [
-                bm.verts.new(Vector((x0_out, y0, z0_out))),
-                bm.verts.new(Vector((x1_out, y0, z1_out))),
-                bm.verts.new(Vector((x1_in,  y0, z1_in))),
-                bm.verts.new(Vector((x0_in,  y0, z0_in))),
-                bm.verts.new(Vector((x0_out, y1, z0_out))),
-                bm.verts.new(Vector((x1_out, y1, z1_out))),
-                bm.verts.new(Vector((x1_in,  y1, z1_in))),
-                bm.verts.new(Vector((x0_in,  y1, z0_in))),
-            ]
-            bm.verts.ensure_lookup_table()
+        self._build_eave_details([(yB, zb), (yF, zb)], axis='X')
 
-            for fi in [
-                (0,1,5,4),(3,2,6,7),(0,3,7,4),
-                (1,2,6,5),(0,1,2,3),(4,5,6,7)
-            ]:
-                f = bm.faces.new([verts[i] for i in fi])
-                f[mat] = mi
-
-        # — Testeros semicirculares —
-        for y_pos in [-ew, d+ew]:
-            prev_out = None
-            prev_in  = None
-            for seg in range(segs + 1):
-                a   = a_start + seg * a_step
-                xo  = cx + (r + et) * math.cos(a)
-                zo  = z  + (r + et) * math.sin(a)
-                xi  = cx + r * math.cos(a)
-                zi  = z  + r * math.sin(a)
-                curr_out = bm.verts.new(Vector((xo, y_pos, zo)))
-                curr_in  = bm.verts.new(Vector((xi, y_pos, zi)))
-                bm.verts.ensure_lookup_table()
-
-                if prev_out and prev_in:
-                    try:
-                        f = bm.faces.new([
-                            prev_in, prev_out,
-                            curr_out, curr_in
-                        ])
-                        f[mat] = mi
-                    except Exception:
-                        pass
-                prev_out = curr_out
-                prev_in  = curr_in
-
-        # — Tejas sobre la bóveda —
-        if p.tile_type != 'NONE':
-            half_circ = math.pi * r
-            self._build_tiles_on_slope(
-                [], w, r, r,
-                0.0, p.tile_type, p.mat_tile
-            )
-
-    # ────────────────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════
     #  GENERATE
-    # ────────────────────────────────────────────────────────
-    def generate(self):
-        p = self.props
+    # ═══════════════════════════════════════════════════════
+    def generate(self, create_mats=True):
+        """Punto de entrada principal. Devuelve (mesh, ok)."""
+        p  = self.props
+        bm = self.bm
 
-        dispatch = {
-            'FLAT'     : self._build_flat,
-            'GABLE'    : self._build_gable,
-            'HIP'      : self._build_hip,
-            'SHED'     : self._build_shed,
-            'MANSARD'  : self._build_mansard,
+        builders = {
+            'GABLE':     self._build_gable,
+            'SHED':      self._build_shed,
+            'HIP':       self._build_hip,
+            'SALTBOX':   self._build_saltbox,
             'BUTTERFLY': self._build_butterfly,
-            'SALTBOX'  : self._build_saltbox,
-            'VAULT'    : self._build_vault,
+            'MANSARD':   self._build_mansard,
+            'VAULT':     self._build_vault,
         }
+        fn = builders.get(p.roof_type, self._build_gable)
+        fn()
 
-        builder = dispatch.get(p.roof_type)
-        if builder:
-            builder()
+        bm.faces.ensure_lookup_table()
 
+        mesh = bpy.data.meshes.new(p.object_name or "AF_Roof")
+        bm.to_mesh(mesh)
+        bm.free()
+        mesh.update()
+
+        if create_mats:
+            self.ensure_materials(mesh)
+
+        return mesh, True
+
+    # ────────────────────────────────────────────────────────
+    #  MATERIALES
+    # ────────────────────────────────────────────────────────
+    def ensure_materials(self, mesh):
+        """Crea/asigna 6 slots: roof, tile, fascia, soffit,
+        ridge, skylight."""
+        p = self.props
+        mat_names = [
+            ("AF_Roof",      (0.35, 0.12, 0.08, 1.0), 0.8),
+            ("AF_Roof_Tile", (0.45, 0.15, 0.10, 1.0), 0.75),
+            ("AF_Fascia",    (0.90, 0.90, 0.90, 1.0), 0.6),
+            ("AF_Soffit",    (0.95, 0.95, 0.95, 1.0), 0.7),
+            ("AF_Ridge",     (0.30, 0.10, 0.08, 1.0), 0.8),
+            ("AF_Skylight",  (0.60, 0.80, 0.90, 1.0), 0.1),
+        ]
+        tile_colors = {
+            'ZINC':    (0.62, 0.64, 0.66, 1.0),
+            'ETERNIT': (0.55, 0.55, 0.57, 1.0),
+            'THERMO':  (0.85, 0.87, 0.88, 1.0),
+            'METAL':   (0.25, 0.30, 0.35, 1.0),
+            'ROMAN':   (0.50, 0.16, 0.10, 1.0),
+            'ESPANOLA':(0.55, 0.20, 0.12, 1.0),
+            'SHINGLE': (0.20, 0.18, 0.16, 1.0),
+        }
+        if p.tile_type in tile_colors:
+            name, _, rough = mat_names[1]
+            mat_names[1] = (name, tile_colors[p.tile_type], rough)
+
+        while len(mesh.materials) < len(mat_names):
+            mesh.materials.append(None)
+
+        for i, (name, color, rough) in enumerate(mat_names):
+            mat = bpy.data.materials.get(name)
+            if mat is None:
+                mat = bpy.data.materials.new(name=name)
+                mat.use_nodes = True
+                bsdf = None
+                for node in mat.node_tree.nodes:
+                    if node.type == 'BSDF_PRINCIPLED':
+                        bsdf = node
+                        break
+                if bsdf is not None:
+                    bsdf.inputs['Base Color'].default_value = color
+                    bsdf.inputs['Roughness'].default_value = rough
+            mesh.materials[i] = mat
+
+        p.mat_roof     = 0
+        p.mat_tile     = 1
+        p.mat_fascia   = 2
+        p.mat_soffit   = 3
+        p.mat_ridge    = 4
+        p.mat_skylight = 5
+
+
+# ════════════════════════════════════════════════════════════
+#  FUNCIÓN UPDATE
+# ════════════════════════════════════════════════════════════
+def af_roof_update(self, context):
+    """Regenera el techo cuando cambia una propiedad."""
+    obj = None
+    if isinstance(self, bpy.types.Object):
+        obj = self
+    else:
+        for o in bpy.data.objects:
+            if getattr(o, "af_roof", None) == self:
+                obj = o
+                break
+
+    if obj is None or obj.type != 'MESH':
+        return
+
+    props = obj.af_roof
+
+    try:
+        generator = AF_RoofGenerator(props)
+        mesh, ok = generator.generate(create_mats=True)
+
+        if ok and mesh is not None:
+            old_mesh = obj.data
+            old_name = old_mesh.name if old_mesh else "AF_Roof"
+            obj.data = mesh
+            mesh.name = old_name
+            if old_mesh and old_mesh.users == 0:
+                bpy.data.meshes.remove(old_mesh)
+    except Exception as e:
+        print(f"[AF Roof] Error regenerando: {e}")
+
+
+def af_roof_sync_props_from_object(obj):
+    """Sincroniza propiedades RNA desde custom properties."""
+    if obj is None:
+        return
+    props = getattr(obj, "af_roof", None)
+    if props is None:
+        return
+    for key in list(obj.keys()):
+        if key.startswith("_"):
+            continue
         try:
-            bmesh.ops.recalc_face_normals(
-                bm=self.bm, faces=self.bm.faces
-            )
+            if hasattr(props, key):
+                setattr(props, key, obj[key])
         except Exception:
             pass
 
-        return self.bm
+
+def af_roof_tile_update(self, context):
+    """Presets por tipo de teja + regenera."""
+    tile_presets = {
+        'ZINC':     dict(tile_length=1.83, tile_width=0.08,
+                         tile_thickness=0.002),
+        'ETERNIT':  dict(tile_length=1.83, tile_width=0.15,
+                         tile_thickness=0.006),
+        'THERMO':   dict(tile_length=2.44, tile_width=1.00,
+                         tile_thickness=0.05),
+        'METAL':    dict(tile_length=2.44, tile_width=1.00,
+                         tile_thickness=0.004),
+        'ESPANOLA': dict(tile_length=0.40, tile_width=0.20,
+                         tile_thickness=0.015),
+        'ROMAN':    dict(tile_length=0.40, tile_width=0.09,
+                         tile_thickness=0.015),
+    }
+    preset = tile_presets.get(getattr(self, "tile_type", "NONE"))
+    if preset:
+        for k, v in preset.items():
+            try:
+                setattr(self, k, v)
+            except Exception:
+                pass
+    af_roof_update(self, context)
 
 
 # ════════════════════════════════════════════════════════════
-#  UPDATE / REBUILD
+#  SETUP + CREATE
 # ════════════════════════════════════════════════════════════
-def _find_roof_object(props):
-    name = props.object_name
-    if name and name in bpy.data.objects:
-        return bpy.data.objects[name]
-    for obj in bpy.data.objects:
-        if (obj.type == 'MESH'
-                and hasattr(obj, AF_ROOF_PROP)
-                and getattr(obj, AF_ROOF_PROP) is props):
-            return obj
-    return None
+def af_roof_setup_object(obj, props=None):
+    """Configura display + custom props espejo."""
+    obj.display_type = 'TEXTURED'
+    obj.show_all_edges = True
+
+    if props is not None:
+        for key in ('roof_type', 'width', 'depth', 'z_base',
+                    'tile_type'):
+            try:
+                obj[key] = getattr(props, key)
+            except Exception:
+                pass
 
 
-def af_roof_update(self, context):
-    obj = _find_roof_object(self)
-    if obj is None:
-        obj = context.active_object
-    if obj is None or obj.type != 'MESH':
-        return
-    props = getattr(obj, AF_ROOF_PROP, None)
-    if props is None or not props.is_af_roof:
-        return
-    _rebuild_roof_mesh(obj, props)
+def af_roof_create(context, props_dict=None, name="AF_Roof",
+                   link=True):
+    """Crea un objeto techo paramétrico."""
+    mesh = bpy.data.meshes.new(name)
+    obj  = bpy.data.objects.new(name, mesh)
 
+    if link and context.collection:
+        context.collection.objects.link(obj)
 
-def _rebuild_roof_mesh(obj, props):
-    gen = AF_RoofGenerator(props)
-    bm  = gen.generate()
-    if bm is None:
-        return
-    me = obj.data
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
+    props = getattr(obj, "af_roof", None)
+    if props is not None and props_dict:
+        for k, v in props_dict.items():
+            try:
+                if hasattr(props, k):
+                    setattr(props, k, v)
+            except Exception:
+                pass
 
-    for poly in me.polygons:
-        poly.use_smooth = True
+    if props is not None:
+        props.object_name = obj.name
+        af_roof_setup_object(obj, props)
+        af_roof_update(obj, context)
 
-    if "material_index" in me.polygon_layers_int:
-        layer = me.polygon_layers_int["material_index"]
-        for poly in me.polygons:
-            poly.material_index = layer.data[poly.index].value
-
-
-def _setup_roof_materials(obj):
-    mat_names = [
-        "AF.Roof.Concrete",
-        "AF.Roof.Tile",
-        "AF.Door.Frame",
-        "AF.Wall.Plaster",
-        "AF.Roof.Metal",
-        "AF.Window.Glass",
-    ]
-    af_material.ensure_af_materials_for_object(obj, mat_names)
-
-
-def _create_roof_object(context, name="AF_Roof"):
-    me  = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, me)
-    context.collection.objects.link(obj)
-    context.view_layer.objects.active = obj
-    obj.select_set(True)
-
-    props             = obj.archiforge_roof
-    props.is_af_roof  = True
-    props.object_name = obj.name
-    _setup_roof_materials(obj)
-    return obj, props
+    return obj
 
 
 # ════════════════════════════════════════════════════════════
 #  OPERADORES
 # ════════════════════════════════════════════════════════════
-class ARCHIFORGE_OT_roof(Operator):
-    bl_idname      = "archiforge.roof"
-    bl_label       = "Add AF Roof"
-    bl_description = "Add a parametric ArchiForge roof"
-    bl_options     = {'REGISTER', 'UNDO'}
+class ARCHIFORGE_OT_roof_add(Operator):
+    """Add ArchiForge parametric roof"""
+    bl_idname = "archiforge.roof_add"
+    bl_label = "Add Roof"
+    bl_options = {'REGISTER', 'UNDO'}
 
-    roof_type : EnumProperty(
-        name="Type", items=AF_ROOF_TYPES, default='GABLE',
+    roof_type: EnumProperty(
+        name="Roof Type", items=AF_ROOF_TYPES, default='GABLE',
     )
-    width : FloatProperty(
-        name="Width", default=8.0, min=0.5, unit='LENGTH',
-    )
-    depth : FloatProperty(
-        name="Depth", default=6.0, min=0.5, unit='LENGTH',
-    )
-    z_base : FloatProperty(
-        name="Base Height", default=3.0, min=0.0, unit='LENGTH',
-    )
-    pitch : FloatProperty(
-        name="Pitch", default=math.radians(30),
-        min=math.radians(1), max=math.radians(89), subtype='ANGLE',
-    )
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self)
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        col = layout.column(align=True)
-        col.label(text="New Roof", icon='HOME')
-        col.prop(self, "roof_type")
-        col.separator()
-        col.prop(self, "width")
-        col.prop(self, "depth")
-        col.prop(self, "z_base")
-        col.prop(self, "pitch")
-
-        # Info: altura de cumbrera
-        ridge_h = math.tan(self.pitch) * (self.depth * 0.5)
-        col.separator()
-        col.label(
-            text=f"Ridge Height: {ridge_h:.2f} m",
-            icon='INFO'
-        )
 
     def execute(self, context):
-        bpy.ops.object.select_all(action='DESELECT')
-        obj, props = _create_roof_object(context, "AF_Roof")
-        props.roof_type = self.roof_type
-        props.width     = self.width
-        props.depth     = self.depth
-        props.z_base    = self.z_base
-        props.pitch     = self.pitch
-        _rebuild_roof_mesh(obj, props)
-        self.report({'INFO'}, f"Roof created: {obj.name}")
+        obj = af_roof_create(
+            context,
+            props_dict={'roof_type': self.roof_type},
+            name=f"AF_Roof_{self.roof_type.title()}",
+        )
+        if obj is not None:
+            bpy.ops.object.select_all(action='DESELECT')
+            obj.select_set(True)
+            context.view_layer.objects.active = obj
         return {'FINISHED'}
 
 
-class ARCHIFORGE_OT_roof_update(Operator):
-    bl_idname  = "archiforge.roof_update"
-    bl_label   = "Update Roof"
+class ARCHIFORGE_OT_roof_place(Operator):
+    """Click to place roof, ESC to cancel"""
+    bl_idname = "archiforge.roof_place"
+    bl_label = "Place Roof"
+
+    roof_type: EnumProperty(
+        name="Roof Type", items=AF_ROOF_TYPES, default='GABLE',
+    )
+
+    def modal(self, context, event):
+        if event.type in {'RIGHTMOUSE', 'ESC'}:
+            if self._obj is not None:
+                bpy.data.objects.remove(self._obj, do_unlink=True)
+            return {'CANCELLED'}
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            return {'FINISHED'}
+        return {'RUNNING_MODAL'}
+
+    def invoke(self, context, event):
+        self._obj = af_roof_create(
+            context,
+            props_dict={'roof_type': self.roof_type},
+            name=f"AF_Roof_{self.roof_type.title()}",
+        )
+        if self._obj is None:
+            return {'CANCELLED'}
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+
+class ARCHIFORGE_OT_roof_edit(Operator):
+    """Edit selected roof (regenerate)"""
+    bl_idname = "archiforge.roof_edit"
+    bl_label = "Edit Roof"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return (
-            obj is not None and obj.type == 'MESH'
-            and hasattr(obj, AF_ROOF_PROP)
-            and obj.archiforge_roof.is_af_roof
-        )
+        return (obj is not None
+                and getattr(obj, "af_roof", None) is not None
+                and obj.af_roof.is_af_roof)
 
     def execute(self, context):
         obj = context.active_object
-        _rebuild_roof_mesh(obj, obj.archiforge_roof)
-        self.report({'INFO'}, "Roof updated")
+        af_roof_sync_props_from_object(obj)
+        af_roof_update(obj, context)
         return {'FINISHED'}
 
 
-class ARCHIFORGE_OT_roof_from_wall(Operator):
-    """Crea el techo adaptando dimensiones desde el muro activo."""
-    bl_idname  = "archiforge.roof_from_wall"
-    bl_label   = "Roof from Wall"
+class ARCHIFORGE_OT_roof_tile_preset(Operator):
+    """Apply tile preset"""
+    bl_idname = "archiforge.roof_tile_preset"
+    bl_label = "Tile Preset"
     bl_options = {'REGISTER', 'UNDO'}
 
-    roof_type : EnumProperty(
-        name="Type", items=AF_ROOF_TYPES, default='GABLE',
-    )
-    pitch : FloatProperty(
-        name="Pitch", default=math.radians(30),
-        min=math.radians(1), max=math.radians(89), subtype='ANGLE',
+    tile_type: EnumProperty(
+        name="Tile Type", items=AF_TILE_TYPES, default='ZINC',
     )
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return (
-            obj is not None and obj.type == 'MESH'
-            and hasattr(obj, "archiforge_wall")
-            and obj.archiforge_wall.is_af_wall
-        )
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self)
-
-    def draw(self, context):
-        col = self.layout.column(align=True)
-        col.prop(self, "roof_type")
-        col.prop(self, "pitch")
+        return (obj is not None
+                and getattr(obj, "af_roof", None) is not None)
 
     def execute(self, context):
-        wall  = context.active_object
-        wprops = wall.archiforge_wall
-
-        # Obtener dimensiones del muro
-        pts = [wall.matrix_world @ Vector(c) for c in wall.bound_box]
-        xs  = [p.x for p in pts]
-        ys  = [p.y for p in pts]
-        w   = max(xs) - min(xs)
-        d   = max(ys) - min(ys)
-        z   = wprops.height
-
-        bpy.ops.object.select_all(action='DESELECT')
-        obj, props = _create_roof_object(context, "AF_Roof")
-
-        props.roof_type = self.roof_type
-        props.width     = w
-        props.depth     = d
-        props.z_base    = z
-        props.pitch     = self.pitch
-
-        # Mover el techo a la posición del muro
-        obj.location = Vector((min(xs), min(ys), 0.0))
-
-        _rebuild_roof_mesh(obj, props)
-        self.report({'INFO'}, f"Roof from wall '{wall.name}'")
+        obj = context.active_object
+        obj.af_roof.tile_type = self.tile_type
+        af_roof_tile_update(obj.af_roof, context)
         return {'FINISHED'}
 
 
@@ -1482,192 +1460,129 @@ class ARCHIFORGE_OT_roof_from_wall(Operator):
 #  PANEL
 # ════════════════════════════════════════════════════════════
 class ARCHIFORGE_PT_roof(Panel):
-    bl_label       = "Roof Properties"
-    bl_idname      = "ARCHIFORGE_PT_roof"
-    bl_space_type  = "VIEW_3D"
-    bl_region_type = "UI"
-    bl_category    = "ArchiForge"
-    bl_context     = "objectmode"
-    bl_options     = {'DEFAULT_CLOSED'}
+    bl_label = "ArchiForge Roof"
+    bl_idname = "ARCHIFORGE_PT_roof"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "ArchiForge"
+    bl_context = "objectmode"
 
     @classmethod
     def poll(cls, context):
         obj = context.active_object
-        return (
-            obj is not None and obj.type == 'MESH'
-            and hasattr(obj, AF_ROOF_PROP)
-            and obj.archiforge_roof.is_af_roof
-        )
-
-    def draw_header(self, context):
-        self.layout.label(text="", icon='HOME')
+        return (obj is not None
+                and getattr(obj, "af_roof", None) is not None
+                and obj.af_roof.is_af_roof)
 
     def draw(self, context):
-        props  = context.active_object.archiforge_roof
         layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
+        obj = context.active_object
+        p = obj.af_roof
 
-        # ── Tipo ─────────────────────────────────────────────
         box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
-        col.prop(props, "roof_type", text="")
-
-        # Info de altura
-        ridge_h = math.tan(props.pitch) * (props.depth * 0.5)
-        col.label(text=f"Ridge: {ridge_h:.2f} m", icon='INFO')
-
-        # ── Dimensiones ───────────────────────────────────────
-        box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Dimensions", icon='ARROW_LEFTRIGHT')
-        col.prop(props, "width")
-        col.prop(props, "depth")
-        col.prop(props, "z_base")
-
-        # ── Pendiente ─────────────────────────────────────────
-        box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Pitch / Slope", icon='TRIA_UP')
-        col.prop(props, "pitch")
-        if props.roof_type in ('SALTBOX', 'BUTTERFLY'):
-            col.prop(props, "pitch_back")
-        if props.roof_type == 'MANSARD':
-            col.prop(props, "mansard_break")
-            col.prop(props, "mansard_pitch_lower")
-        if props.roof_type == 'VAULT':
-            col.prop(props, "vault_segments")
-
-        # ── Alero ─────────────────────────────────────────────
-        box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Eave", icon='MOD_THICKNESS')
-        col.prop(props, "eave_width")
-        col.prop(props, "eave_thickness")
-
-        # ── Fascia ────────────────────────────────────────────
-        box = layout.box()
+        box.label(text="Roof Type", icon='HOME')
+        box.prop(p, "roof_type", text="")
         row = box.row(align=True)
-        row.prop(
-            props, "fascia_enable",
-            text="Fascia Board",
-            icon='TRIA_DOWN' if props.fascia_enable else 'TRIA_RIGHT',
-            toggle=True, emboss=False,
-        )
-        if props.fascia_enable:
-            col = box.column(align=True)
-            col.prop(props, "fascia_width")
-            col.prop(props, "fascia_depth")
+        row.operator("archiforge.roof_edit", text="Regenerate",
+                     icon='FILE_REFRESH')
 
-        # ── Soffit ────────────────────────────────────────────
         box = layout.box()
-        row = box.row(align=True)
-        row.prop(
-            props, "soffit_enable",
-            text="Soffit",
-            icon='TRIA_DOWN' if props.soffit_enable else 'TRIA_RIGHT',
-            toggle=True, emboss=False,
-        )
-        if props.soffit_enable:
-            box.prop(props, "soffit_thickness")
+        box.label(text="Dimensions", icon='ARROW_LEFTRIGHT')
+        box.prop(p, "width")
+        box.prop(p, "depth")
+        box.prop(p, "z_base")
 
-        # ── Cumbrera ──────────────────────────────────────────
-        if props.roof_type not in ('FLAT', 'SHED',
-                                   'BUTTERFLY', 'VAULT'):
-            box = layout.box()
-            row = box.row(align=True)
-            row.prop(
-                props, "ridge_enable",
-                text="Ridge Cap",
-                icon='TRIA_DOWN' if props.ridge_enable else 'TRIA_RIGHT',
-                toggle=True, emboss=False,
-            )
-            if props.ridge_enable:
-                col = box.column(align=True)
-                col.prop(props, "ridge_width")
-                col.prop(props, "ridge_height")
-
-        # ── Tejas ─────────────────────────────────────────────
         box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Tiles / Cladding", icon='MATERIAL')
-        col.prop(props, "tile_type", text="")
-        if props.tile_type != 'NONE':
-            col.prop(props, "tile_length")
-            col.prop(props, "tile_width")
-            col.prop(props, "tile_thickness")
-            col.prop(props, "tile_overlap")
+        box.label(text="Slope", icon='TRIA_UP')
+        box.prop(p, "pitch")
+        if p.roof_type in {'SALTBOX', 'BUTTERFLY'}:
+            box.prop(p, "pitch_back")
+        if p.roof_type == 'MANSARD':
+            box.prop(p, "mansard_break")
+            box.prop(p, "mansard_pitch_lower")
+        if p.roof_type == 'VAULT':
+            box.prop(p, "vault_segments")
 
-        # ── Lucernario ────────────────────────────────────────
-        if props.roof_type not in ('FLAT', 'VAULT'):
-            box = layout.box()
-            row = box.row(align=True)
-            row.prop(
-                props, "skylight_enable",
-                text="Skylight",
-                icon='TRIA_DOWN' if props.skylight_enable else 'TRIA_RIGHT',
-                toggle=True, emboss=False,
-            )
-            if props.skylight_enable:
-                col = box.column(align=True)
-                col.prop(props, "skylight_width")
-                col.prop(props, "skylight_height")
-                col.prop(props, "skylight_pos_x")
-                col.prop(props, "skylight_pos_y")
-
-        # ── Materiales ────────────────────────────────────────
         box = layout.box()
-        col = box.column(align=True)
-        col.label(text="Materials", icon='MATERIAL')
-        col.prop(props, "mat_roof",   text="Roof")
-        if props.tile_type != 'NONE':
-            col.prop(props, "mat_tile", text="Tiles")
-        if props.fascia_enable:
-            col.prop(props, "mat_fascia", text="Fascia")
-        if props.soffit_enable:
-            col.prop(props, "mat_soffit", text="Soffit")
-        if props.ridge_enable:
-            col.prop(props, "mat_ridge", text="Ridge")
-        if props.skylight_enable:
-            col.prop(props, "mat_skylight", text="Skylight")
+        box.label(text="Eave", icon='MOD_FLUID')
+        box.prop(p, "eave_width")
+        box.prop(p, "eave_thickness")
+        box.prop(p, "fascia_enable")
+        if p.fascia_enable:
+            box.prop(p, "fascia_width")
+            box.prop(p, "fascia_depth")
+        box.prop(p, "soffit_enable")
+        if p.soffit_enable:
+            box.prop(p, "soffit_thickness")
 
-        # ── Acciones ──────────────────────────────────────────
-        layout.separator()
-        row = layout.row(align=True)
-        row.operator("archiforge.roof_update", icon='FILE_REFRESH')
-        row.operator("archiforge.roof_from_wall", text="From Wall", icon='SNAP_FACE')
+        box = layout.box()
+        box.label(text="Ridge", icon='ALIGN_TOP')
+        box.prop(p, "ridge_enable")
+        if p.ridge_enable:
+            box.prop(p, "ridge_width")
+            box.prop(p, "ridge_height")
+
+        box = layout.box()
+        box.label(text="Tiles / Cover", icon='GRID')
+        box.prop(p, "tile_type", text="")
+        if p.tile_type != 'NONE':
+            if p.tile_type in {'ZINC', 'ETERNIT', 'THERMO',
+                               'METAL'}:
+                box.prop(p, "tile_length", text="Sheet Length")
+                box.prop(p, "tile_width", text="Pitch / Width")
+            else:
+                box.prop(p, "tile_length")
+                box.prop(p, "tile_width")
+            box.prop(p, "tile_thickness")
+            if p.tile_type in {'FLAT_TILE', 'SHINGLE'}:
+                box.prop(p, "tile_overlap")
+
+        box = layout.box()
+        box.label(text="Skylight", icon='LIGHT_HEMI')
+        box.prop(p, "skylight_enable")
+        if p.skylight_enable:
+            box.prop(p, "skylight_width")
+            box.prop(p, "skylight_height")
+            box.prop(p, "skylight_pos_x")
+            box.prop(p, "skylight_pos_y")
+
+        box = layout.box()
+        box.label(text="Materials", icon='MATERIAL')
+        box.prop(p, "mat_roof", text="Roof")
+        box.prop(p, "mat_tile", text="Tile")
+        box.prop(p, "mat_fascia", text="Fascia")
+        box.prop(p, "mat_soffit", text="Soffit")
+        box.prop(p, "mat_ridge", text="Ridge")
+        box.prop(p, "mat_skylight", text="Skylight")
 
 
 # ════════════════════════════════════════════════════════════
 #  REGISTRO
 # ════════════════════════════════════════════════════════════
-classes = [
+classes = (
     AF_RoofProperties,
-    ARCHIFORGE_OT_roof,
-    ARCHIFORGE_OT_roof_update,
-    ARCHIFORGE_OT_roof_from_wall,
+    ARCHIFORGE_OT_roof_add,
+    ARCHIFORGE_OT_roof_place,
+    ARCHIFORGE_OT_roof_edit,
+    ARCHIFORGE_OT_roof_tile_preset,
     ARCHIFORGE_PT_roof,
-]
+)
 
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-
-    bpy.types.Object.archiforge_roof = PointerProperty(
-        type        = AF_RoofProperties,
-        name        = "ArchiForge Roof",
-        description = "ArchiForge parametric roof properties",
-    )
-    print("[ArchiForge] ✅ af_roof — registered")
+    bpy.types.Object.af_roof = PointerProperty(type=AF_RoofProperties)
 
 
 def unregister():
-    if hasattr(bpy.types.Object, "archiforge_roof"):
-        del bpy.types.Object.archiforge_roof
-
+    try:
+        del bpy.types.Object.af_roof
+    except Exception:
+        pass
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
 
-    print("[ArchiForge] 🔴 af_roof — unregistered")
+
+if __name__ == "__main__":
+    register()
