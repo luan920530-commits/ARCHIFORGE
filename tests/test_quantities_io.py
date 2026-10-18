@@ -49,6 +49,29 @@ class QuantityCollectionTests(unittest.TestCase):
         self.assertAlmostEqual(rows[1][3], 2.55)
         self.assertIn("L=4,25", rows[0][5])
 
+    def test_closed_wall_includes_implicit_return_segment(self):
+        wall_props = SimpleNamespace(
+            is_af_wall=True,
+            object_name="AF_ClosedRoom",
+            closed=True,
+            height=2.5,
+            width=0.2,
+            parts=[
+                SimpleNamespace(length=4.0, angle=0.0, enabled=True),
+                SimpleNamespace(length=3.0, angle=1.5707963267948966,
+                                 enabled=True),
+                SimpleNamespace(length=4.0, angle=1.5707963267948966,
+                                 enabled=True),
+            ],
+        )
+        wall = SimpleNamespace(name="AF_ClosedRoom", archiforge_wall=wall_props)
+
+        rows = collect_quantities([wall])
+
+        self.assertAlmostEqual(rows[0][3], 35.0)
+        self.assertAlmostEqual(rows[1][3], 7.0)
+        self.assertIn("L=14,00", rows[0][5])
+
     def test_custom_slab_uses_polygon_area_and_subtracts_holes(self):
         slab_props = SimpleNamespace(
             is_af_slab=True,

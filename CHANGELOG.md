@@ -5,6 +5,28 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.6.0] — 2026-10-18 — Dibujo de muros y recintos
+
+### Agregado
+- **Draw Wall / Room**: herramienta modal para trazar muros conectados con
+  clics; permite cerrar un recinto haciendo clic en el primer vértice o con
+  `C`, terminar un muro abierto con `Enter`, quitar el último vértice con
+  `Backspace` y cancelar con `Esc`.
+- Cada trazo genera un único objeto paramétrico. Las esquinas se calculan con
+  offsets cíclicos; el contorno incluye el tramo de retorno y se rechazan
+  polígonos cerrados degenerados o autointersectados.
+- Cálculos puros y pruebas de geometría de caminos en `af_wall_path.py`, sin
+  depender de Blender.
+
+### Mejorado
+- El generador de muros y sus zócalos/cornisas conectan cíclicamente los
+  extremos al cerrar un recinto, en vez de dejar tapas o una junta final.
+- El exportador de cantidades suma el tramo de retorno implícito de muros
+  cerrados para informar el perímetro completo.
+- README con instrucciones de trazado, atajos y requisitos del plano de dibujo.
+
+---
+
 ## [1.5.2] — 2026-10-18 — Estabilidad, cantidades y calidad
 
 ### Corregido

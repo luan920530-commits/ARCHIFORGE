@@ -87,12 +87,36 @@ def _segments_length(parts):
 
 
 def _wall_length(props):
-    """Sum enabled wall segments; never confuse thickness with length."""
+    """Sum enabled wall segments, including an implicit closing edge."""
     try:
-        parts = getattr(props, "parts", ())
+        parts = list(getattr(props, "parts", ()))
     except (AttributeError, ReferenceError, TypeError):
-        parts = ()
-    return _segments_length(parts)
+        parts = []
+    length = _segments_length(parts)
+    try:
+        is_closed = bool(getattr(props, "closed", False))
+    except (AttributeError, ReferenceError, TypeError):
+        is_closed = False
+    if not is_closed:
+        return length
+
+    # Older manually-closed walls may rely on the Closed toggle without a
+    # stored final segment. Include that generated edge in the perimeter.
+    x = y = angle = 0.0
+    for part in parts:
+        try:
+            if not bool(getattr(part, "enabled", True)):
+                continue
+            angle += _property_number(part, "angle")
+            segment_length = _property_number(part, "length")
+            x += math.cos(angle) * segment_length
+            y += math.sin(angle) * segment_length
+        except (AttributeError, ReferenceError, TypeError):
+            continue
+    closing_length = math.hypot(x, y)
+    if closing_length > 1e-5:
+        length += closing_length
+    return length
 
 
 def _polygon_bounds(vertices):

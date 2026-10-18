@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 5, 2),
+    "version"     : (1, 6, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -106,6 +106,7 @@ if "bpy" in locals():
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_wall_path",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -171,6 +172,7 @@ else:
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_wall_path",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -1137,6 +1139,10 @@ def _draw_shift_a_menu(self, context):
         layout.operator(
             "archiforge.wall", text="Wall",
             **_icon_kw(icons, "wall", 'MESH_CUBE'))
+    if _op_exists("archiforge.wall_draw"):
+        layout.operator(
+            "archiforge.wall_draw", text="Draw Wall / Room",
+            icon='GREASEPENCIL')
     if _op_exists("archiforge.window_preset_menu"):
         layout.operator(
             "archiforge.window_preset_menu", text="Window",

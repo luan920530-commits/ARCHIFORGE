@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.5.2-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -25,11 +25,28 @@ con `Shift+A → ArchiForge → Control Center`, o con `F3 → Control Center`.
 
 ---
 
+## 🧱 Dibujo de muros y recintos (nuevo en v1.6)
+
+Inicie **Draw Wall / Room** desde `Shift+A → ArchiForge` o busque la
+herramienta con `F3`. Haga clic para marcar cada vértice; para crear un
+recinto, haga clic cerca del primer punto o pulse `C`. Pulse `Enter` para
+terminar una polilínea abierta, `Backspace` para quitar el último vértice y
+`Esc` para cancelar. El dibujo ocurre en el plano horizontal a la altura Z
+del cursor 3D y respeta el snap del addon si está activado.
+
+Cada trazo crea un solo muro paramétrico con tramos conectados y esquinas
+calculadas en conjunto. Los recintos cerrados incluyen el tramo de retorno,
+cierran las esquinas automáticamente y se pueden editar desde **Wall
+Properties** (por ejemplo, altura y espesor); no hace falta alinear muros
+independientes a mano.
+
+---
+
 ## ✨ Módulos
 
 | Módulo | Contenido |
 |---|---|
-| 🧱 Muros / Losas | Muros (+Draw, desde curva), losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK** (v1.2), desde muro/curva, pisos y cielorrasos, huecos |
+| 🧱 Muros / Losas | Muros paramétricos + **Draw Wall / Room** (trazo conectado, recintos cerrados), desde curva; losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK** (v1.2), pisos/cielorrasos y huecos |
 | 🏠 Techos (v1.1) | Gable, Shed, Hip, Saltbox, Butterfly, Mansard, Bóveda + **9 cubiertas**: zinc, eternit, termoacústica, metálica, española, romana, plana, tejuela |
 | 🚪 Puertas / Ventanas (v1.1) | Presets CO: puertas 0.70–1.20 m, ventanas 1.00×1.00 → 2.40×2.20 + antepecho; modos Draw y Place |
 | 🪜 Escaleras | Clásicas (presets) + nuevas: recta, en L, caracol y **rampa 8%** |
@@ -98,10 +115,10 @@ desregistrar las clases y callbacks anteriores antes de recargar módulos.
 
 El exportador genera un CSV separado por punto y coma, con BOM UTF-8 para
 Excel, a partir de los objetos de la **escena activa**. Incluye longitudes de
-segmentos de muros/vallas, áreas de planta, geometría de losas y conteo de
-piezas paramétricas. Los huecos rectangulares de losas se descuentan de forma
-aproximada; los techos se reportan como **área proyectada** (`m2 proy.`), sin
-aplicar la pendiente.
+muros/vallas (con el retorno de recintos cerrados), áreas de planta, geometría
+de losas y conteo de piezas paramétricas. Los huecos rectangulares se
+descuentan de forma aproximada; los techos se reportan como **área
+proyectada** (`m2 proy.`), sin aplicar la pendiente.
 
 Son **estimaciones geométricas basadas en parámetros**, no un presupuesto ni
 una medición normativa: no incluyen automáticamente escalas de objeto,
@@ -119,11 +136,12 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.5.2)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.6.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
-├── af_wall.py           # Muros
+├── af_wall_path.py      # Geometría y validación pura de trazos de muro
+├── af_wall.py           # Muros paramétricos y herramienta Draw Wall / Room
 ├── af_slab.py           # Losas: 4 sistemas constructivos (v1.2)
 ├── af_roof.py           # Techos + 9 cubiertas (v1.1)
 ├── af_door.py           # Puertas + presets CO (v1.1)
@@ -146,6 +164,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.6.0** — Dibujo de muros conectados y recintos cerrados con esquinas automáticas
 - **v1.5.2** — Correcciones al hot-reload, conteo de cantidades, CSV seguro y CI
 - **v1.5.1** — Hotfix: imports/reload tolerantes (un módulo ausente ya no tumba el addon)
 - **v1.5.0** — 🎛️ Control Center flotante con todos los módulos
@@ -177,9 +196,9 @@ python -m unittest discover -s tests -v
 ```
 
 Comprueba sintaxis compatible con Python 3.10, unicidad de identificadores
-Blender y regresiones del cálculo/exportación de cantidades. La geometría y
-la interfaz deben probarse además dentro de Blender; CI no sustituye esa
-validación.
+Blender y regresiones del cálculo/exportación de cantidades y de la geometría
+pura de los trazos de muro. La geometría generada y la interfaz modal deben
+probarse además dentro de Blender; CI no sustituye esa validación.
 
 ## 🛣️ Roadmap
 
