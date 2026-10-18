@@ -44,7 +44,7 @@ ArchiForge genera muros, losas, baños, instalaciones eléctricas, muebles, coci
 
 **Opción C — Desarrollo**
 ```bash
-git clone https://github.com/TU-USUARIO/archiforge.git
+git clone https://github.com/luan920530-commits/archiforge.git
 ```
 Luego enlace o copie la carpeta a su ruta de addons. Con el addon cargado, pulse `F8` en Blender para recargar cambios sin reiniciar.
 
