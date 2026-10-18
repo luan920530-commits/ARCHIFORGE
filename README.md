@@ -1,9 +1,9 @@
 # ArchiForge 🏗️
 
-**Modelado arquitectónico paramétrico para Blender 3.3 LTS**
+**Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.5.1-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.5.2-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -48,32 +48,36 @@ en medidas comerciales colombianas.
 
 ## 📋 Requisitos
 
-- **Blender 3.3 LTS** (probado en 3.3.x; iconos y llamadas `bmesh`
-  100% compatibles con 3.3)
+- **Blender 3.3 LTS o posterior** (3.3 es la versión mínima declarada en el addon).
+  La compatibilidad real debe verificarse en la versión de Blender de destino;
+  no se incluye Blender en las pruebas automatizadas del repositorio.
 - Sin dependencias externas: solo Blender + Python estándar
 - macOS / Windows / Linux
 
 ## 🚀 Instalación
 
-**Opción A — ZIP (recomendada)**
-1. Descargue el `.zip` del último [Release](../../releases) y descomprímalo
-2. En Blender: `Edit → Preferences → Add-ons → Install…` → seleccione
-   la carpeta `ArchiForge`
-3. Active la casilla **ArchiForge**
+**Opción A — Release ZIP (recomendada)**
+1. Descargue el `.zip` del último [Release](https://github.com/luan920530-commits/ARCHIFORGE/releases)
+2. En Blender: `Edit → Preferences → Add-ons → Install…` y seleccione el ZIP
+3. Active **ArchiForge**. Si instala desde código fuente, asegúrese de que
+   `__init__.py` quede directamente dentro de la carpeta del addon.
 
 **Opción B — Carpeta manual**
-1. Copie la carpeta `ArchiForge` en sus addons:
-   - Windows: `%APPDATA%\Blender Foundation\Blender\3.3\scripts\addons\`
-   - macOS: `~/Library/Application Support/Blender/3.3/scripts/addons/`
-   - Linux: `~/.config/blender/3.3/scripts/addons/`
-2. En `Preferences → Add-ons`, active **ArchiForge**
+Copie o clone el paquete completo en la carpeta `scripts/addons/ArchiForge/`:
+- Windows: `%APPDATA%\Blender Foundation\Blender\3.3\scripts\addons\ArchiForge\`
+- macOS: `~/Library/Application Support/Blender/3.3/scripts/addons/ArchiForge/`
+- Linux: `~/.config/blender/3.3/scripts/addons/ArchiForge/`
+
+La carpeta `ArchiForge` debe contener `__init__.py` y los módulos `af_*.py`
+(al mismo nivel). Luego active **ArchiForge** en `Preferences → Add-ons`.
 
 **Opción C — Desarrollo**
+Desde la carpeta `scripts/addons/`:
 ```bash
-git clone https://github.com/luan920530-commits//archiforge.git
+git clone https://github.com/luan920530-commits/ARCHIFORGE.git ArchiForge
 ```
-Luego enlace o copie la carpeta a su ruta de addons. Con el addon cargado,
-pulse `F8` en Blender para recargar cambios sin reiniciar.
+Con el addon cargado, `F8` en Blender recarga scripts. El hot-reload intenta
+desregistrar las clases y callbacks anteriores antes de recargar módulos.
 
 > 💡 **Actualizando desde una versión anterior**: haga copia de su carpeta
 > `ArchiForge`, copie los archivos nuevos encima y desactive/reactive
@@ -90,6 +94,21 @@ pulse `F8` en Blender para recargar cambios sin reiniciar.
 
 > 💡 Los objetos se crean en el cursor 3D, con origen en el piso.
 
+## 📊 Cantidades y alcance
+
+El exportador genera un CSV separado por punto y coma, con BOM UTF-8 para
+Excel, a partir de los objetos de la **escena activa**. Incluye longitudes de
+segmentos de muros/vallas, áreas de planta, geometría de losas y conteo de
+piezas paramétricas. Los huecos rectangulares de losas se descuentan de forma
+aproximada; los techos se reportan como **área proyectada** (`m2 proy.`), sin
+aplicar la pendiente.
+
+Son **estimaciones geométricas basadas en parámetros**, no un presupuesto ni
+una medición normativa: no incluyen automáticamente escalas de objeto,
+mermas, traslapos, acero, acabados ni la composición real de sistemas
+aligerados. Verifique y ajuste los resultados antes de usarlos para compra,
+licitación o construcción.
+
 ## 🎨 Materiales
 
 Cada objeto trae slots `AF.*` auto-asignados (cerámica, metal, vidrio,
@@ -100,7 +119,7 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.5.1)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.5.2)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
@@ -117,14 +136,17 @@ ArchiForge/
 ├── af_kitchen.py        # Cocina
 ├── af_decor.py          # Decoración
 ├── af_openings.py       # Puertas/ventanas paramétricas
-├── af_quantities.py     # Exportación CSV
-└── ...                  # Escalera clásica, cerca, piso, cercha, snap, UI
+├── af_quantities.py     # Integración de exportación CSV con Blender
+├── af_quantities_io.py  # Cálculos/CSV puros, testeables sin Blender
+├── icons/               # Iconos opcionales (fallback nativo de Blender)
+└── tests/               # Regresiones y comprobaciones estáticas
 ```
 
 ## 📝 Versiones
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.5.2** — Correcciones al hot-reload, conteo de cantidades, CSV seguro y CI
 - **v1.5.1** — Hotfix: imports/reload tolerantes (un módulo ausente ya no tumba el addon)
 - **v1.5.0** — 🎛️ Control Center flotante con todos los módulos
 - **v1.4.0** — Estructura+ · Puertas/ventanas CO · Losas (4 sistemas) · Techos (9 cubiertas)
@@ -144,6 +166,20 @@ Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 | Falta un módulo en el Control Center | El diálogo lo omite solo; revise la consola (`Window → Toggle System Console`) para ver qué archivo falta |
 
 ¿Otro error? Abra un **Issue** pegando el traceback completo de la consola.
+
+## 🧪 Pruebas de desarrollo
+
+El conjunto de pruebas no requiere Blender y se ejecuta con la biblioteca
+estándar de Python:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+Comprueba sintaxis compatible con Python 3.10, unicidad de identificadores
+Blender y regresiones del cálculo/exportación de cantidades. La geometría y
+la interfaz deben probarse además dentro de Blender; CI no sustituye esa
+validación.
 
 ## 🛣️ Roadmap
 

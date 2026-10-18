@@ -5,6 +5,38 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.5.2] — 2026-10-18 — Estabilidad, cantidades y calidad
+
+### Corregido
+- El hot-reload intenta desregistrar clases, menús y callbacks existentes
+  antes de recargar módulos, evitando reemplazar referencias de clases que
+  Blender todavía conserva registradas.
+- El exportador ya no interpreta cada `PointerProperty` por defecto como un
+  objeto ArchiForge. Comprueba el marcador y el nombre persistido del objeto;
+  las longitudes de muro se calculan sumando segmentos activos, no usando el
+  espesor como largo.
+- Losas personalizadas calculan el área con el polígono; se descuentan huecos
+  rectangulares y se incluyen las escaleras del módulo nuevo, pisos, vallas,
+  techos, cerchas, estructura, puertas y ventanas.
+- El exportador trabaja sobre la escena activa, no sobre todos los objetos
+  `bpy.data` del archivo.
+- CSV con quoting correcto para `;`, comillas y saltos de línea, y neutraliza
+  celdas de texto que podrían interpretarse como fórmulas en Excel.
+- Eliminada una copia accidental de `af_structure.py` dentro de `icons/`, que
+  duplicaba cuatro `bl_idname` de Blender.
+
+### Mejorado
+- Separadas las funciones puras de cantidades/CSV para probarlas sin `bpy`;
+  se añadieron pruebas de regresión, verificación estática y CI en Python 3.10
+  y 3.11.
+- La exportación muestra una advertencia explícita de que sus resultados son
+  estimaciones paramétricas, no un presupuesto normativo.
+- README corregido con pasos de instalación, URL canónica, alcance de
+  cantidades y comando de pruebas. El directorio de iconos ahora documenta el
+  fallback a iconos nativos de Blender.
+
+---
+
 ## [1.5.1] — 2026-10-18 — Hotfix de carga
 
 ### Corregido

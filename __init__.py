@@ -32,12 +32,12 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 5, 1),
+    "version"     : (1, 5, 2),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
-    "doc_url"     : "",
-    "tracker_url" : "",
+    "doc_url"     : "https://github.com/luan920530-commits/ARCHIFORGE#readme",
+    "tracker_url" : "https://github.com/luan920530-commits/ARCHIFORGE/issues",
     "support"     : "COMMUNITY",
     "category"    : "Add Mesh",
 }
@@ -84,6 +84,18 @@ def _on_log_level_update(self, context):
 if "bpy" in locals():
     import importlib as _imp
 
+    # Unregister the old classes and callbacks before importlib.reload replaces
+    # their Python class objects. Otherwise Blender retains the old RNA classes
+    # while the new classes fail to register with the same bl_idname.
+    _previous_unregister = locals().get("unregister")
+    if callable(_previous_unregister):
+        try:
+            _previous_unregister()
+            af_log("Addon anterior desregistrado antes del hot-reload", level=3)
+        except Exception as _err:  # noqa: BLE001 — best-effort cleanup
+            af_log(f"No se pudo limpiar todo antes del hot-reload: {_err}",
+                   level=2)
+
     _RELOAD_ORDER = (
         # 1. Core (base del sistema)
         "af_material",
@@ -111,6 +123,8 @@ if "bpy" in locals():
         "af_decor",
         "af_openings",
         "af_stairs",
+        # Pure helper, reloaded before the Blender-facing exporter.
+        "af_quantities_io",
         "af_quantities",
         "af_structure",
         "af_control_center",
@@ -141,7 +155,7 @@ if "bpy" in locals():
 
     af_log("🔄 Hot-reload completado", level=3)
 
-    del _imp, _RELOAD_ORDER, _mod_name, _mod
+    del _imp, _RELOAD_ORDER, _mod_name, _mod, _previous_unregister
 
 else:
     # Imports TOLERANTES (v1.5.1): un módulo ausente o con error
@@ -174,6 +188,8 @@ else:
         "af_decor",
         "af_openings",
         "af_stairs",
+        # Pure helper, reloaded before the Blender-facing exporter.
+        "af_quantities_io",
         "af_quantities",
         "af_structure",
         "af_control_center",
@@ -240,7 +256,8 @@ def _load_icons():
     icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 
     if not os.path.isdir(icons_dir):
-        af_log(f"Carpeta de íconos no encontrada: {icons_dir}", level=2)
+        af_log("No hay íconos personalizados; se usarán los iconos de Blender",
+               level=3)
         _icons_collection["main"] = previews.new()
         return
 

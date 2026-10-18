@@ -1,0 +1,12 @@
+# Python bytecode and test/lint caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+
+# Blender backup and autosave files
+*.blend1
+*.blend2
+*.blend@
+*.blend.autosave
