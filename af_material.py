@@ -83,6 +83,12 @@ AF_MATERIALS_CATALOG = {
     # ── Truss / Estructura ───────────────────────────────────
     "AF.Truss.Metal"     : {"color": (0.50, 0.52, 0.55, 1.0), "rough": 0.35, "metal": 0.9, "cat": "Truss"},
     "AF.Truss.Wood"      : {"color": (0.42, 0.26, 0.12, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Truss"},
+
+    # ── Room Asset Library ───────────────────────────────────
+    "AF.Room.Wood"       : {"color": (0.38, 0.23, 0.13, 1.0), "rough": 0.58, "metal": 0.0,  "cat": "Room"},
+    "AF.Room.Fabric"     : {"color": (0.68, 0.61, 0.53, 1.0), "rough": 0.82, "metal": 0.0,  "cat": "Room"},
+    "AF.Room.Metal"      : {"color": (0.20, 0.23, 0.25, 1.0), "rough": 0.30, "metal": 0.72, "cat": "Room"},
+    "AF.Room.Accent"     : {"color": (0.20, 0.43, 0.35, 1.0), "rough": 0.55, "metal": 0.0,  "cat": "Room"},
 }
 
 # Categorías disponibles para el filtro de la UI
@@ -96,6 +102,7 @@ AF_MATERIAL_CATEGORIES = [
     ('STAIR',  "Stair",   "Stair materials"),
     ('FENCE',  "Fence",   "Fence materials"),
     ('TRUSS',  "Truss",   "Truss materials"),
+    ('ROOM',   "Room Assets", "Furniture and decor materials"),
 ]
 
 

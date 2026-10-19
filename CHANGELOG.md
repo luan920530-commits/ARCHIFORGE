@@ -5,6 +5,25 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.8.0] — 2026-10-19 — Biblioteca paramétrica por ambientes
+
+### Agregado
+- Catálogo navegable de **100 objetos o sets, 20 para cada ambiente**:
+  dormitorio, sala, cocina, baño y solar/jardín. Incluye dimensiones métricas
+  sugeridas, calidad de malla, materiales y controles editables.
+- Mesas de noche, camas, cabeceros, cómodas, clósets, tocadores; sofás,
+  mesas de centro redondas/rectangulares, mesas nido, auxiliares, consolas,
+  libreros y repisas de varios formatos.
+- Nuevos módulos y sets para cocinas, baños y exteriores, con gabinetes,
+  despensas, accesorios, asadores, pérgolas, jardineras, iluminación y
+  decoración.
+- Acceso desde **Room Asset Library** en el panel ArchiForge, Control Center
+  y menú `Shift+A → ArchiForge`.
+- Los objetos de la biblioteca se incluyen en las cantidades CSV agrupados por
+  ambiente, con sus dimensiones métricas.
+
+---
+
 ## [1.7.0] — 2026-10-19 — Contornos de losas/pisos y booleanos paramétricos
 
 ### Agregado

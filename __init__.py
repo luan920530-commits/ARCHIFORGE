@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 7, 0),
+    "version"     : (1, 8, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -106,6 +106,8 @@ if "bpy" in locals():
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_room_assets_catalog",
+        "af_room_assets",
         "af_wall_path",
         "af_floor_geometry",
         "af_outline_draw",
@@ -174,6 +176,8 @@ else:
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_room_assets_catalog",
+        "af_room_assets",
         "af_wall_path",
         "af_floor_geometry",
         "af_outline_draw",
@@ -1033,6 +1037,14 @@ class ARCHIFORGE_PT_create(Panel):
 
             layout.separator(factor=0.3)
 
+        if _op_exists("archiforge.room_asset"):
+            box = layout.box()
+            box.label(text="Room Assets · 100 objects / sets",
+                      icon='ASSET_MANAGER')
+            box.operator("archiforge.room_asset", text="Browse by room",
+                         icon='MESH_CUBE')
+            layout.separator(factor=0.3)
+
         # ── SECCIÓN: Aberturas (NUEVO — v1.3) ──────────────
         if has_open:
             box = layout.box()
@@ -1242,6 +1254,9 @@ def _draw_shift_a_menu(self, context):
     if _op_exists("archiforge.decor"):
         layout.operator("archiforge.decor", text="Decor Item",
                         **_icon_kw(icons, "decor", 'LIGHT'))
+    if _op_exists("archiforge.room_asset"):
+        layout.operator("archiforge.room_asset", text="Room Asset Library",
+                        icon='ASSET_MANAGER')
     if _op_exists("archiforge.opening"):
         layout.operator("archiforge.opening", text="Door/Window",
                         **_icon_kw(icons, "opening", 'MESH_CUBE'))
@@ -1310,6 +1325,7 @@ _modules = [
     af_preset,
     af_autoboolean,
     af_objects_base,
+    af_room_assets,
     af_wall,
     af_door,
     af_window,

@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.7.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -35,10 +35,10 @@ terminar una polilínea abierta, `Backspace` para quitar el último vértice y
 del cursor 3D y respeta el snap del addon si está activado.
 
 Cada trazo crea un solo muro paramétrico con tramos conectados y esquinas
-calculadas en conjunto. Los recintos cerrados incluyen el tramo de retorno,
-cierran las esquinas automáticamente y se pueden editar desde **Wall
-Properties** (por ejemplo, altura y espesor); no hace falta alinear muros
-independientes a mano.
+calculadas en conjunto. Los recintos cerrados incluyen el tramo de retorno y
+se editan desde **Wall Properties** (por ejemplo, altura y espesor). Para
+conectar esquinas, trace el recinto como una sola ruta; los muros creados por
+separado todavía pueden requerir alineación manual.
 
 ## 📐 Dibujo de losas y pisos (nuevo en v1.7)
 
@@ -55,6 +55,35 @@ Para un corte booleano de puerta/ventana paramétrica, active **Cut in Wall**
 y seleccione el muro objetivo. Si inicia la creación con un muro ArchiForge
 seleccionado, queda preseleccionado; el cutter se actualiza al cambiar las
 medidas o el muro objetivo.
+
+## 🛋️ Biblioteca de objetos por ambiente (nuevo en v1.8)
+
+Abra **Room Asset Library** desde el **Control Center**, el panel ArchiForge
+o `Shift+A → ArchiForge`. Incluye **20 objetos o sets por ambiente (100 en
+total)**:
+
+- **Dormitorio:** mesas de noche de cajones, nicho, flotantes y redondas;
+camas sencilla/queen/king con sets de tendido; cabeceros, cómodas, chifonier,
+armarios abatibles/corredizos/abiertos, tocador, banca, espejo, canasto y par
+de lámparas.
+- **Sala:** sofás de 2–4 puestos y seccional, poltronas, butacas, ottoman,
+puf, mesas de centro redonda/rectangular, mesas nido, auxiliares y consolas;
+mueble de TV, vitrina, librero, escalera, cubos, repisas y set decorativo.
+- **Cocina:** módulos bajos, cajoneras, gabinetes superiores, alacena,
+esquinero, isla, barra, carrito, butaco, mesa de desayuno, banca, riel de
+ollas, especiero, plato-rack, botellero, despensa y sets de reciclaje/café/
+preparación.
+- **Baño:** vanities sencillo/doble, torre de linos, gabinete espejo,
+repisas, escalera y barras toalleras, ganchos, portarrollo, nicho/caddy,
+bancas, canasto, tapetes, set spa, organizador, bandeja, escobillero y barras
+de apoyo.
+- **Solar/jardín:** mesa, silla, banca, asoleadora, sofá exterior, set bistró,
+mesa picnic, pérgola, baúl, jardineras, huerta elevada, enrejado, arco,
+sombrilla, parrilla, fogón, fuente, bebedero y sets de balizas/faroles.
+
+Cada selección crea una malla editable con dimensiones sugeridas en metros;
+puede ajustar ancho, fondo, altura, calidad y materiales. Los sets se generan
+como un solo objeto paramétrico para mover y dimensionar en conjunto.
 
 ---
 
@@ -77,11 +106,13 @@ las instrucciones para editar o regenerar los iconos están en [`icons/README.md
 | 🚪 Puertas / Ventanas (v1.1) | Presets CO: puertas 0.70–1.20 m, ventanas 1.00×1.00 → 2.40×2.20 + antepecho; modos Draw y Place |
 | 🪜 Escaleras | Clásicas (presets) + nuevas: recta, en L, caracol y **rampa 8%** |
 | 🏗️ Estructura+ | Zapatas, columnas, vigas, losa aligerada, ejes/rejilla y niveles con rótulos |
-| 🛁 Baño (v2) | Sanitario, bidé, lavamanos, vanitorio, ducha, tina, espejo, toallero, **ducha eléctrica 🇨🇴** |
+| 🛁 Baño (v2) | Sanitarios y aparatos; vanities, torre de linos, espejo-gabinete y sets de toalleros, nichos, organizadores, tapetes y seguridad |
 | 🔌 Eléctrico (v2.1) | Tomas EU/US/UK/**CO+GFCI 🇨🇴**, interruptores, datos RJ45, bombillos, colgantes, downlights, apliques, tablero + **luz real de Blender** |
-| 🛋️ Muebles | Sillas, poltrona, sofá, mesas, **camas CO 🇨🇴** (sencilla → king), nochero, chifonier, biblioteca |
-| 🍳 Cocina | Nevera, estufa, campana, lavaplatos, lavavajillas, microondas, utensilios |
-| 🪴 Decoración | Materas con plantas, lámparas, floreros, cuadros, reloj, libros, TV, tapete |
+| 🛋️ Muebles | Sillas, poltrona, sofás, camas CO 🇨🇴, mesas de noche, comedor/centro/laterales/nido/consola, libreros, repisas, clósets y tocadores |
+| 🍳 Cocina | Nevera, estufa, campana, lavaplatos, lavavajillas, microondas, islas, módulos, despensas, butacos, racks y sets |
+| 🌿 Exterior | Patio, bistró, picnic, pérgolas, baúles, jardineras, huerta, enrejados, parrilla, fogón, fuente e iluminación |
+| 🪴 Decoración | Materas con plantas, lámparas, floreros, cuadros, reloj, libros, TV, tapete y sets decorativos por ambiente |
+| 🗂️ Room Asset Library (v1.8) | **100 objetos o sets**: 20 opciones paramétricas para dormitorio, sala, cocina, baño y solar/jardín |
 | 🚧 Extras | Cerchas (truss), cercas, pisos/patterns, booleanas automáticas |
 | 📊 Cantidades | **Exportación CSV (Excel)** de cantidades del proyecto |
 
@@ -142,9 +173,9 @@ desregistrar las clases y callbacks anteriores antes de recargar módulos.
 El exportador genera un CSV separado por punto y coma, con BOM UTF-8 para
 Excel, a partir de los objetos de la **escena activa**. Incluye longitudes de
 muros/vallas (con el retorno de recintos cerrados), áreas de planta, geometría
-de losas y conteo de piezas paramétricas. Los huecos rectangulares se
-descuentan de forma aproximada; los techos se reportan como **área
-proyectada** (`m2 proy.`), sin aplicar la pendiente.
+de losas, piezas paramétricas y objetos de Room Asset Library por ambiente.
+Los huecos rectangulares se descuentan de forma aproximada; los techos se
+reportan como **área proyectada** (`m2 proy.`), sin aplicar la pendiente.
 
 Son **estimaciones geométricas basadas en parámetros**, no un presupuesto ni
 una medición normativa: no incluyen automáticamente escalas de objeto,
@@ -162,10 +193,12 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.7.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.8.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
+├── af_room_assets_catalog.py # Catálogo puro de 100 presets por ambiente
+├── af_room_assets.py        # Generador paramétrico de muebles y sets
 ├── af_wall_path.py      # Geometría y validación pura de trazos de muro
 ├── af_floor_geometry.py # Triangulación y recorte poligonal puro (testeable)
 ├── af_outline_draw.py   # Interacción modal común de contornos cerrados
@@ -193,6 +226,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.8.0** — Biblioteca paramétrica de 100 objetos/sets para dormitorio, sala, cocina, baño y solar/jardín
 - **v1.7.0** — Dibujo de contornos de losa/piso, recorte poligonal y ciclo de booleanos paramétricos
 - **v1.6.0** — Dibujo de muros conectados y recintos cerrados con esquinas automáticas
 - **v1.5.2** — Correcciones al hot-reload, conteo de cantidades, CSV seguro y CI

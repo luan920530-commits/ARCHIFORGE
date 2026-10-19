@@ -100,6 +100,27 @@ class QuantityCollectionTests(unittest.TestCase):
         ])
         self.assertIn("4,00x3,00", rows[0][5])
 
+    def test_room_asset_library_items_are_counted_with_room_and_dimensions(self):
+        asset_props = SimpleNamespace(
+            is_af_room_asset=True,
+            object_name="AF_YARD_PERGOLA",
+            room="YARD",
+            asset_type="YARD_PERGOLA",
+            width=2.6,
+            depth=2.2,
+            height=2.35,
+        )
+        asset = SimpleNamespace(
+            name="AF_YARD_PERGOLA", archiforge_room_asset=asset_props)
+
+        rows = collect_quantities([asset])
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][0], "Exterior / jardín")
+        self.assertEqual(rows[0][1], "YARD_PERGOLA")
+        self.assertEqual(rows[0][3:5], (1, "und"))
+        self.assertEqual(rows[0][5], "2,60×2,20×2,35 m")
+
     def test_custom_floor_uses_polygon_area_instead_of_its_bounding_box(self):
         floor_props = SimpleNamespace(
             is_af_floor=True,

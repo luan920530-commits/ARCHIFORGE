@@ -426,6 +426,12 @@ class ARCHIFORGE_OT_control_center(Operator):
                 ('BOOKS', "Books"), ('TV', "TV"), ('RUG', "Rug")],
                 icon='LIGHT', custom=True, icons=icons, icon_name='decor')
 
+        if _op_exists("archiforge.room_asset"):
+            box = layout.box()
+            box.label(text="Room Asset Library", icon='ASSET_MANAGER')
+            box.operator("archiforge.room_asset", text="Browse 100 objects / sets",
+                         icon='MESH_CUBE')
+
     # ═══════════════════════════════════════════════════════
     #  TAB: ELÉCTRICO + HERRAMIENTAS
     # ═══════════════════════════════════════════════════════

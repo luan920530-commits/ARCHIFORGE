@@ -372,6 +372,26 @@ def collect_quantities(objects):
                     width, rise, risers)
             rows.append(("Escaleras", item_type, obj_name, 1, "und", measures))
 
+        room_asset = _registered_props(
+            obj, "archiforge_room_asset", "is_af_room_asset")
+        if room_asset is not None:
+            room = _property_text(room_asset, "room", default="")
+            category = {
+                "BEDROOM": "Muebles dormitorio",
+                "LIVING": "Muebles sala",
+                "KITCHEN": "Cocina",
+                "BATHROOM": "Baño",
+                "YARD": "Exterior / jardín",
+            }.get(room, "Muebles y decoración")
+            item_type = _property_text(
+                room_asset, "asset_type", default="Objeto / set")
+            measures = "{}×{}×{} m".format(
+                format_number(_property_number(room_asset, "width")),
+                format_number(_property_number(room_asset, "depth")),
+                format_number(_property_number(room_asset, "height")),
+            )
+            rows.append((category, item_type, obj_name, 1, "und", measures))
+
         unit_families = (
             ("archiforge_bathroom", "is_af_bathroom", "Baño"),
             ("archiforge_electrical", "is_af_electrical", "Eléctrico"),
