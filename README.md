@@ -83,7 +83,9 @@ sombrilla, parrilla, fogón, fuente, bebedero y sets de balizas/faroles.
 
 Cada selección crea una malla editable con dimensiones sugeridas en metros;
 puede ajustar ancho, fondo, altura, calidad y materiales. Los sets se generan
-como un solo objeto paramétrico para mover y dimensionar en conjunto.
+como un solo objeto paramétrico para mover y dimensionar en conjunto. Las
+medidas son presets de referencia, no fichas de fabricante ni garantía de
+cumplimiento normativo.
 
 ---
 
