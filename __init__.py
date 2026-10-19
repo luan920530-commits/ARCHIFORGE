@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 6, 0),
+    "version"     : (1, 7, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -107,6 +107,8 @@ if "bpy" in locals():
         "af_autoboolean",
         "af_objects_base",
         "af_wall_path",
+        "af_floor_geometry",
+        "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -173,6 +175,8 @@ else:
         "af_autoboolean",
         "af_objects_base",
         "af_wall_path",
+        "af_floor_geometry",
+        "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -824,6 +828,10 @@ class ARCHIFORGE_PT_create(Panel):
             row.operator(
                 "archiforge.slab_from_curve", text="Slab",
                 **_icon_kw(icons, "slab", 'MESH_CUBE'))
+        if _op_exists("archiforge.slab_draw"):
+            row.operator(
+                "archiforge.slab_draw", text="Draw",
+                **_icon_kw(icons, "slab", 'GREASEPENCIL'))
         if _op_exists("archiforge.slab_from_wall"):
             row.operator(
                 "archiforge.slab_from_wall", text="Floor",
@@ -1119,6 +1127,10 @@ class ARCHIFORGE_PT_create(Panel):
                 "archiforge.floor_preset_menu", text="",
                 icon='CURVE_DATA'
             ).preset_operator = "archiforge.floor_from_curve"
+        if _op_exists("archiforge.floor_draw"):
+            row.operator(
+                "archiforge.floor_draw", text="Draw",
+                **_icon_kw(icons, "floor", 'GREASEPENCIL'))
 
         row = col.row(align=True)
         if _op_exists("archiforge.truss"):
@@ -1169,6 +1181,14 @@ def _draw_shift_a_menu(self, context):
         layout.operator(
             "archiforge.wall_draw", text="Draw Wall / Room",
             **_icon_kw(icons, "wall_draw", 'GREASEPENCIL'))
+    if _op_exists("archiforge.slab_draw"):
+        layout.operator(
+            "archiforge.slab_draw", text="Draw Slab",
+            **_icon_kw(icons, "slab", 'MESH_CUBE'))
+    if _op_exists("archiforge.floor_draw"):
+        layout.operator(
+            "archiforge.floor_draw", text="Draw Floor",
+            **_icon_kw(icons, "floor", 'MESH_GRID'))
     if _op_exists("archiforge.window_preset_menu"):
         layout.operator(
             "archiforge.window_preset_menu", text="Window",

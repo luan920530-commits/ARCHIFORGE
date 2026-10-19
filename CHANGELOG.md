@@ -5,6 +5,28 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.7.0] — 2026-10-19 — Contornos de losas/pisos y booleanos paramétricos
+
+### Agregado
+- **Draw Slab Outline** y **Draw Floor Outline**: trazos modales cerrados en
+  el plano Z del cursor 3D, con snap del addon, vista previa, cierre en el
+  primer punto o con `C`/`Enter`, deshacer vértice con `Backspace` y cancelar
+  con `Esc`.
+- Los pisos guardan su polígono personalizado y recortan tanto la base como
+  las baldosas al contorno (incluidos polígonos cóncavos). **Floor from Curve**
+  también utiliza el contorno XY, no solo su caja envolvente. Las cantidades
+  de pisos dibujados usan el área poligonal, no el rectángulo envolvente.
+
+### Corregido
+- Los paramétricos de Doors & Windows (`af_openings.py`) ahora crean o
+  actualizan el Boolean al crear/editar la abertura y al cambiar el muro
+  objetivo. El cutter se mantiene como hijo oculto, se dimensiona en el espacio
+  local de la abertura, y se limpia/reasigna al desactivar o cambiar de muro.
+  Crear la abertura con un muro ArchiForge seleccionado lo preselecciona como
+  objetivo y activa el corte.
+
+---
+
 ## [1.6.0] — 2026-10-18 — Dibujo de muros y recintos
 
 ### Agregado

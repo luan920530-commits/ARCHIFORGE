@@ -277,12 +277,25 @@ def collect_quantities(objects):
         if props is not None:
             width = _property_number(props, "width")
             depth = _property_number(props, "depth")
-            if width > 0.0 and depth > 0.0:
+            floor_area = width * depth
+            try:
+                has_outline = bool(getattr(props, "outline_enabled", False))
+                outline = getattr(props, "outline_vertices", ())
+            except (AttributeError, ReferenceError, TypeError):
+                has_outline = False
+                outline = ()
+            area_label = "área de planta"
+            if has_outline:
+                polygon_area = _polygon_area(outline)
+                if polygon_area > 0.0:
+                    floor_area = polygon_area
+                    area_label = "área poligonal"
+            if floor_area > 0.0:
                 rows.append((
                     "Pisos", _property_text(props, "pattern", default="Piso"),
-                    obj_name, width * depth, "m2",
-                    "{}x{} m (área de planta)".format(
-                        format_number(width), format_number(depth)),
+                    obj_name, floor_area, "m2",
+                    "{}x{} m ({})".format(
+                        format_number(width), format_number(depth), area_label),
                 ))
 
         props = _registered_props(obj, "archiforge_fence", "is_af_fence")

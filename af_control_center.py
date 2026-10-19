@@ -195,6 +195,10 @@ class ARCHIFORGE_OT_control_center(Operator):
             row.operator(
                 "archiforge.slab_from_curve", text="Slab",
                 **_icon_kw(icons, "slab", 'MESH_CUBE'))
+        if _op_exists("archiforge.slab_draw"):
+            row.operator(
+                "archiforge.slab_draw", text="Draw",
+                **_icon_kw(icons, "slab", 'GREASEPENCIL'))
         if _op_exists("archiforge.slab_from_wall"):
             row.operator(
                 "archiforge.slab_from_wall", text="Floor",
@@ -268,6 +272,10 @@ class ARCHIFORGE_OT_control_center(Operator):
                 "archiforge.floor_preset_menu", text="",
                 icon='CURVE_DATA'
             ).preset_operator = "archiforge.floor_from_curve"
+        if _op_exists("archiforge.floor_draw"):
+            row.operator(
+                "archiforge.floor_draw", text="Draw",
+                **_icon_kw(icons, "floor", 'GREASEPENCIL'))
 
     # ═══════════════════════════════════════════════════════
     #  TAB: ABERTURAS + CIRCULACIÓN

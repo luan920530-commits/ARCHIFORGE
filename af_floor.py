@@ -58,12 +58,23 @@ from bpy.props import (
 )
 
 from . import af_material
+from .af_floor_geometry import (
+    clip_polygon_to_outline,
+    fragments_cover_polygon,
+    normalize_outline,
+    polygon_area,
+    polygon_boundary_edges,
+    split_polygon_edges,
+    triangulate_polygon,
+)
+from .af_outline_draw import AF_OutlineDrawMixin
 
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
 # ════════════════════════════════════════════════════════════
 AF_FLOOR_PROP = "archiforge_floor"
+_FLOOR_UPDATE_SUSPENDED = False
 
 AF_FLOOR_PATTERNS = [
     ('REGULAR',      "Regular",       "Aligned square/rect tiles",       'MESH_GRID',     0),
@@ -101,6 +112,13 @@ AF_GROUT_STYLES = [
 # ════════════════════════════════════════════════════════════
 #  PROPERTYGROUP
 # ════════════════════════════════════════════════════════════
+class AF_FloorVertex(PropertyGroup):
+    """One XY point in a floor's saved custom outline."""
+
+    x : FloatProperty(name="X", default=0.0, unit='LENGTH')
+    y : FloatProperty(name="Y", default=0.0, unit='LENGTH')
+
+
 class AF_FloorProperties(PropertyGroup):
 
     is_af_floor : BoolProperty(
@@ -391,6 +409,17 @@ class AF_FloorProperties(PropertyGroup):
         update      = lambda s, c: af_floor_update(s, c),
     )
 
+    # ── Contorno poligonal opcional ──────────────────────────
+    outline_vertices : CollectionProperty(
+        name="Outline", type=AF_FloorVertex,
+    )
+    outline_enabled : BoolProperty(
+        name="Use Custom Outline", default=False, options={'HIDDEN'},
+    )
+    source_curve : StringProperty(
+        name="Source Curve", default="", options={'HIDDEN'},
+    )
+
     # ── Origen ────────────────────────────────────────────────
     origin_center : BoolProperty(
         name        = "Center Origin",
@@ -432,6 +461,107 @@ class AF_FloorGenerator:
             self.ox = 0.0
             self.oy = 0.0
 
+        self.outline = []
+        self._outline_triangles = []
+        self._pattern_rotation_active = False
+        if p.outline_enabled and len(p.outline_vertices) >= 3:
+            try:
+                raw_outline = normalize_outline([
+                    (vertex.x, vertex.y) for vertex in p.outline_vertices
+                ])
+                self.outline = [
+                    (x + self.ox, y + self.oy) for x, y in raw_outline
+                ]
+                self._outline_triangles = triangulate_polygon(self.outline)
+            except ValueError:
+                # Keep legacy rectangular floors editable if saved outline
+                # data is incomplete or was manually corrupted.
+                self.outline = []
+                self._outline_triangles = []
+
+    def _rotate_pattern_points(self, points):
+        if not self._pattern_rotation_active:
+            return points
+        angle = float(self.props.pattern_rotation)
+        if abs(angle) <= 0.001:
+            return points
+        if self.props.origin_center:
+            cx = cy = 0.0
+        else:
+            cx = self.props.width * 0.5
+            cy = self.props.depth * 0.5
+        cosa = math.cos(angle)
+        sina = math.sin(angle)
+        return [
+            (cx + (x - cx) * cosa - (y - cy) * sina,
+             cy + (x - cx) * sina + (y - cy) * cosa)
+            for x, y in points
+        ]
+
+    def _add_prism_fragments(self, fragments, z0, z1, mi):
+        """Create a closed prism from clipped convex fragments."""
+        split_fragments = split_polygon_edges(fragments)
+        vertices = {}
+
+        def get_vert(x, y, z):
+            key = (round(float(x), 9), round(float(y), 9), round(float(z), 9))
+            vert = vertices.get(key)
+            if vert is None:
+                vert = self.bm.verts.new(Vector((x, y, z)))
+                vertices[key] = vert
+            return vert
+
+        for fragment in split_fragments:
+            if abs(polygon_area(fragment)) < 1e-9:
+                continue
+            top = [get_vert(x, y, z1) for x, y in fragment]
+            bottom = [get_vert(x, y, z0) for x, y in fragment]
+            try:
+                face = self.bm.faces.new(top)
+                face[self._mat] = mi
+            except Exception:
+                pass
+            try:
+                face = self.bm.faces.new(list(reversed(bottom)))
+                face[self._mat] = mi
+            except Exception:
+                pass
+
+        for start, end in polygon_boundary_edges(split_fragments):
+            try:
+                bottom_start = get_vert(start[0], start[1], z0)
+                bottom_end = get_vert(end[0], end[1], z0)
+                top_end = get_vert(end[0], end[1], z1)
+                top_start = get_vert(start[0], start[1], z1)
+                face = self.bm.faces.new(
+                    [bottom_start, bottom_end, top_end, top_start])
+                face[self._mat] = mi
+            except Exception:
+                pass
+
+    def _clip_shape_to_outline(self, points, z0, z1, mi):
+        """Clip a tile to a custom concave outline; return False if unchanged."""
+        if not self.outline:
+            return False
+        fragments = clip_polygon_to_outline(
+            points, self.outline, self._outline_triangles)
+        if not fragments:
+            return True
+        if fragments_cover_polygon(fragments, points):
+            if (self._pattern_rotation_active
+                    and abs(self.props.pattern_rotation) > 0.001):
+                self._add_prism_fragments([points], z0, z1, mi)
+                return True
+            return False
+        self._add_prism_fragments(fragments, z0, z1, mi)
+        return True
+
+    def _border_inset(self):
+        """The rectangular border pattern is not valid for custom outlines."""
+        if self.outline or not self.props.border_enable:
+            return 0.0
+        return self.props.border_width
+
     # ────────────────────────────────────────────────────────
     #  UTILIDADES
     # ────────────────────────────────────────────────────────
@@ -454,6 +584,12 @@ class AF_FloorGenerator:
         z1  = thick
 
         if tw < 0.001 or td < 0.001 or thick < 0.001:
+            return
+
+        subject = self._rotate_pattern_points([
+            (x0, y0), (x1, y0), (x1, y1), (x0, y1),
+        ])
+        if self._clip_shape_to_outline(subject, z0, z1, mi):
             return
 
         if bevel > 0.001 and bevel < tw * 0.4 and bevel < td * 0.4:
@@ -562,6 +698,14 @@ class AF_FloorGenerator:
             ))
 
         corners = [rot(v) for v in local]
+        corners = [
+            Vector(point) for point in self._rotate_pattern_points(
+                [(corner.x, corner.y) for corner in corners]
+            )
+        ]
+        if self._clip_shape_to_outline(
+                [(corner.x, corner.y) for corner in corners], z0, z1, mi):
+            return
 
         vb = [bm.verts.new(Vector((c.x, c.y, z0))) for c in corners]
         vt = [bm.verts.new(Vector((c.x, c.y, z1))) for c in corners]
@@ -604,6 +748,15 @@ class AF_FloorGenerator:
                 cx + ox + r * math.cos(a),
                 cy + oy + r * math.sin(a),
             )))
+
+        pts = [
+            Vector(point) for point in self._rotate_pattern_points(
+                [(point.x, point.y) for point in pts]
+            )
+        ]
+        if self._clip_shape_to_outline(
+                [(point.x, point.y) for point in pts], z0, z1, mi):
+            return
 
         vb = [bm.verts.new(Vector((p.x, p.y, z0))) for p in pts]
         vt = [bm.verts.new(Vector((p.x, p.y, z1))) for p in pts]
@@ -666,7 +819,7 @@ class AF_FloorGenerator:
     def _build_border(self):
         """Genera el borde perimetral del piso."""
         p  = self.props
-        if not p.border_enable:
+        if not p.border_enable or self.outline:
             return
 
         bw = p.border_width
@@ -714,7 +867,7 @@ class AF_FloorGenerator:
         d   = p.depth
 
         # Área interior (dejando espacio para el borde si aplica)
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         x_s  = bw + ox
         y_s  = bw + oy
         x_e  = w - bw
@@ -783,7 +936,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         x_s  = bw + ox
         y_s  = bw + oy
@@ -847,7 +1000,7 @@ class AF_FloorGenerator:
         a    = p.herringbone_angle
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         ox   = p.offset_x
         oy   = p.offset_y
 
@@ -894,7 +1047,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         # La celda del parquet es cuadrada
         plank_w = p.tile_width  / nb
@@ -948,7 +1101,7 @@ class AF_FloorGenerator:
         gw   = p.grout_width
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         ox   = p.offset_x
         oy   = p.offset_y
 
@@ -982,7 +1135,7 @@ class AF_FloorGenerator:
         ft  = p.hex_flat_top
         w   = p.width
         d   = p.depth
-        bw  = p.border_width if p.border_enable else 0.0
+        bw  = self._border_inset()
         ox  = p.offset_x
         oy  = p.offset_y
 
@@ -1028,7 +1181,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         # Celda = 2×tw + gw × 2×td + gw
         cell_w = 2 * tw + gw
@@ -1069,7 +1222,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         lmin = p.plank_length_min
         lmax = p.plank_length_max
         off  = p.offset_row
@@ -1130,7 +1283,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         seed = p.plank_random_seed
 
         rng  = random.Random(seed)
@@ -1195,7 +1348,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         smin = p.cobble_size_min
         smax = p.cobble_size_max
         seed = p.cobble_seed
@@ -1240,13 +1393,13 @@ class AF_FloorGenerator:
         """Genera el patrón completo."""
         p = self.props
 
-        # 1) Base
+        # 1) Base y borde conservan el contorno dibujado sin rotación.
         self._build_base()
-
-        # 2) Borde
         self._build_border()
 
-        # 3) Patrón principal
+        # 2) Patrón principal. En contornos personalizados, la rotación se
+        # aplica a cada pieza antes de recortarla, no al límite del suelo.
+        self._pattern_rotation_active = bool(self.outline)
         dispatch = {
             'REGULAR'     : self._build_regular,
             'OFFSET'      : self._build_offset,
@@ -1263,9 +1416,11 @@ class AF_FloorGenerator:
         builder = dispatch.get(p.pattern)
         if builder:
             builder()
+        self._pattern_rotation_active = False
 
-        # 4) Rotación global del patrón
-        if abs(p.pattern_rotation) > 0.001:
+        # 3) Conserva el comportamiento legacy rectangular. Los contornos
+        # personalizados ya rotaron cada baldosa antes del recorte.
+        if not self.outline and abs(p.pattern_rotation) > 0.001:
             rot = Matrix.Rotation(p.pattern_rotation, 4, 'Z')
             cx  = p.width  * 0.5
             cy  = p.depth  * 0.5
@@ -1298,6 +1453,8 @@ def _find_floor_object(props):
 
 
 def af_floor_update(self, context):
+    if _FLOOR_UPDATE_SUSPENDED:
+        return
     obj = _find_floor_object(self)
     if obj is None:
         obj = context.active_object
@@ -1339,18 +1496,61 @@ def _setup_floor_materials(obj):
     af_material.ensure_af_materials_for_object(obj, mat_names)
 
 
-def _create_floor_object(context, name="AF_Floor"):
-    me  = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, me)
-    context.collection.objects.link(obj)
-    context.view_layer.objects.active = obj
-    obj.select_set(True)
+def _set_floor_outline(props, points):
+    """Store a validated world-space path as an object-local CCW outline."""
+    global _FLOOR_UPDATE_SUSPENDED
+    coords = normalize_outline(
+        points, min_segment_length=0.01, max_vertices=64)
+    triangulate_polygon(coords)
+    xs = [point[0] for point in coords]
+    ys = [point[1] for point in coords]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    width, depth = x1 - x0, y1 - y0
+    if width < 0.10 or depth < 0.10:
+        raise ValueError("El contorno debe medir al menos 0.10 m en X e Y")
 
-    props              = obj.archiforge_floor
-    props.is_af_floor  = True
-    props.object_name  = obj.name
-    _setup_floor_materials(obj)
-    return obj, props
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        while len(props.outline_vertices) > len(coords):
+            props.outline_vertices.remove(len(props.outline_vertices) - 1)
+        while len(props.outline_vertices) < len(coords):
+            props.outline_vertices.add()
+        for vertex, point in zip(props.outline_vertices, coords):
+            vertex.x = point[0] - x0
+            vertex.y = point[1] - y0
+        props.width = width
+        props.depth = depth
+        props.origin_center = False
+        props.border_enable = False
+        props.outline_enabled = True
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
+
+    return (x0, y0), width, depth
+
+
+def _create_floor_object(context, name="AF_Floor"):
+    mesh = bpy.data.meshes.new(name)
+    obj = None
+    try:
+        obj = bpy.data.objects.new(name, mesh)
+        context.collection.objects.link(obj)
+        context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        props = obj.archiforge_floor
+        props.is_af_floor = True
+        props.object_name = obj.name
+        _setup_floor_materials(obj)
+        return obj, props
+    except Exception:
+        if obj is not None and obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh.users == 0 and mesh.name in bpy.data.meshes:
+            bpy.data.meshes.remove(mesh)
+        raise
 
 
 # ════════════════════════════════════════════════════════════
@@ -1414,6 +1614,53 @@ class ARCHIFORGE_OT_floor(Operator):
         _rebuild_floor_mesh(obj, props)
         self.report({'INFO'}, f"Floor created: {obj.name}")
         return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_floor_draw(AF_OutlineDrawMixin, Operator):
+    """Draw a closed custom outline for a parametric floor pattern."""
+    bl_idname = "archiforge.floor_draw"
+    bl_label = "Draw Floor Outline"
+    bl_description = (
+        "Click the floor perimeter vertices, then click the first point or "
+        "press C/Enter to close"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+    outline_tool_label = "Floor"
+
+    pattern : EnumProperty(
+        name="Pattern", items=AF_FLOOR_PATTERNS, default='REGULAR',
+    )
+    tile_width : FloatProperty(
+        name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
+    )
+    tile_depth : FloatProperty(
+        name="Tile Depth", default=0.60, min=0.02, unit='LENGTH',
+    )
+
+    def _create_from_outline(self, context, points):
+        global _FLOOR_UPDATE_SUSPENDED
+        obj = None
+        previous_suspend = _FLOOR_UPDATE_SUSPENDED
+        _FLOOR_UPDATE_SUSPENDED = True
+        try:
+            obj, props = _create_floor_object(context, "AF_Floor")
+            origin, _, _ = _set_floor_outline(props, points)
+            obj.location = (origin[0], origin[1], self._draw_z)
+            props.pattern = self.pattern
+            props.tile_width = self.tile_width
+            props.tile_depth = self.tile_depth
+            props.source_curve = ""
+            _rebuild_floor_mesh(obj, props)
+            return obj
+        except Exception:
+            if obj is not None and obj.name in bpy.data.objects:
+                mesh = obj.data if obj.type == 'MESH' else None
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh is not None and mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            raise
+        finally:
+            _FLOOR_UPDATE_SUSPENDED = previous_suspend
 
 
 class ARCHIFORGE_OT_floor_update(Operator):
@@ -1517,35 +1764,55 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
         col.prop(self, "tile_width")
 
     def execute(self, context):
+        global _FLOOR_UPDATE_SUSPENDED
         curve = context.active_object
-        mw    = curve.matrix_world
-        pts   = []
-        for spline in curve.data.splines:
-            if spline.type == 'BEZIER':
-                for bp in spline.bezier_points:
-                    pts.append(mw @ bp.co)
-            else:
-                for bp in spline.points:
-                    pts.append(mw @ Vector(bp.co[:3]))
-
-        if len(pts) < 2:
-            self.report({'ERROR'}, "Need at least 2 points")
+        if not curve.data.splines:
+            self.report({'ERROR'}, "The curve has no outline spline")
             return {'CANCELLED'}
 
-        xs = [p.x for p in pts]
-        ys = [p.y for p in pts]
-        w  = max(xs) - min(xs)
-        d  = max(ys) - min(ys)
+        spline = curve.data.splines[0]
+        points = []
+        if spline.type == 'BEZIER':
+            points = [curve.matrix_world @ point.co
+                      for point in spline.bezier_points]
+        else:
+            points = [curve.matrix_world @ Vector(point.co[:3])
+                      for point in spline.points]
+        if len(points) < 3:
+            self.report({'ERROR'}, "Curve outline needs at least 3 points")
+            return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
-        obj, props = _create_floor_object(context, "AF_Floor")
-        props.pattern    = self.pattern
-        props.width      = max(w, 0.1)
-        props.depth      = max(d, 0.1)
-        props.tile_width = self.tile_width
-        props.tile_depth = self.tile_width
-        obj.location     = Vector((min(xs), min(ys), 0.0))
-        _rebuild_floor_mesh(obj, props)
+        obj = None
+        previous_suspend = _FLOOR_UPDATE_SUSPENDED
+        _FLOOR_UPDATE_SUSPENDED = True
+        try:
+            obj, props = _create_floor_object(context, "AF_Floor")
+            origin, _, _ = _set_floor_outline(props, points)
+            obj.location = (origin[0], origin[1], min(point.z for point in points))
+            props.pattern = self.pattern
+            props.tile_width = self.tile_width
+            props.tile_depth = self.tile_width
+            props.source_curve = curve.name
+            _rebuild_floor_mesh(obj, props)
+        except ValueError as exc:
+            if obj is not None:
+                mesh = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            self.report({'ERROR'}, str(exc))
+            return {'CANCELLED'}
+        except Exception:
+            if obj is not None:
+                mesh = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            raise
+        finally:
+            _FLOOR_UPDATE_SUSPENDED = previous_suspend
+
         self.report({'INFO'}, f"Floor from curve '{curve.name}'")
         return {'FINISHED'}
 
@@ -1585,14 +1852,23 @@ class ARCHIFORGE_PT_floor(Panel):
         col = box.column(align=True)
         col.label(text="Pattern", icon='MODIFIER')
         col.prop(props, "pattern", text="")
-        col.prop(props, "origin_center")
+        origin = col.row()
+        origin.enabled = not props.outline_enabled
+        origin.prop(props, "origin_center")
 
         # ── Área ─────────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
         col.label(text="Area", icon='ARROW_LEFTRIGHT')
-        col.prop(props, "width")
-        col.prop(props, "depth")
+        dimensions = col.column(align=True)
+        dimensions.enabled = not props.outline_enabled
+        dimensions.prop(props, "width")
+        dimensions.prop(props, "depth")
+        if props.outline_enabled:
+            col.label(
+                text=f"Custom outline · {len(props.outline_vertices)} points",
+                icon='MOD_BOOLEAN',
+            )
 
         # Info
         n_x = max(1, int(props.width / max(props.tile_width, 0.01)))
@@ -1678,13 +1954,19 @@ class ARCHIFORGE_PT_floor(Panel):
         # ── Borde ─────────────────────────────────────────────
         box = layout.box()
         row = box.row(align=True)
+        row.enabled = not props.outline_enabled
         row.prop(
             props, "border_enable",
             text="Border",
             icon='TRIA_DOWN' if props.border_enable else 'TRIA_RIGHT',
             toggle=True, emboss=False,
         )
-        if props.border_enable:
+        if props.outline_enabled:
+            box.label(
+                text="Border pattern is available for rectangular floors",
+                icon='INFO',
+            )
+        elif props.border_enable:
             col = box.column(align=True)
             col.prop(props, "border_style")
             col.prop(props, "border_width")
@@ -1733,9 +2015,11 @@ class ARCHIFORGE_PT_floor(Panel):
 #  REGISTRO
 # ════════════════════════════════════════════════════════════
 classes = [
+    AF_FloorVertex,
     AF_FloorProperties,
 
     ARCHIFORGE_OT_floor,
+    ARCHIFORGE_OT_floor_draw,
     ARCHIFORGE_OT_floor_update,
     ARCHIFORGE_OT_floor_from_wall,
     ARCHIFORGE_OT_floor_from_curve,

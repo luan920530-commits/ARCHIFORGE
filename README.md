@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.6.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.7.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -40,6 +40,22 @@ cierran las esquinas automáticamente y se pueden editar desde **Wall
 Properties** (por ejemplo, altura y espesor); no hace falta alinear muros
 independientes a mano.
 
+## 📐 Dibujo de losas y pisos (nuevo en v1.7)
+
+Inicie **Draw Slab** o **Draw Floor** desde `Shift+A → ArchiForge` o el
+**Control Center**. Marque los vértices del perímetro con clics y cierre
+haciendo clic cerca del primer punto o pulsando `C`/`Enter`; `Backspace` quita
+el último punto y `Esc` cancela. El plano y el snap son los mismos que en
+**Draw Wall / Room**. Los contornos cruzados, degenerados o demasiado pequeños
+se rechazan antes de crear el objeto. El piso se genera como polígono real y
+recorta la base y las piezas al borde; **Floor from Curve** conserva también
+el contorno XY de la curva.
+
+Para un corte booleano de puerta/ventana paramétrica, active **Cut in Wall**
+y seleccione el muro objetivo. Si inicia la creación con un muro ArchiForge
+seleccionado, queda preseleccionado; el cutter se actualiza al cambiar las
+medidas o el muro objetivo.
+
 ---
 
 ## 🎨 Iconos propios
@@ -56,7 +72,7 @@ las instrucciones para editar o regenerar los iconos están en [`icons/README.md
 
 | Módulo | Contenido |
 |---|---|
-| 🧱 Muros / Losas | Muros paramétricos + **Draw Wall / Room** (trazo conectado, recintos cerrados), desde curva; losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK** (v1.2), pisos/cielorrasos y huecos |
+| 🧱 Muros / Losas | Muros paramétricos + **Draw Wall / Room**; **Draw Slab / Draw Floor** para contornos cerrados; losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK**, pisos recortados al polígono, desde curva y huecos |
 | 🏠 Techos (v1.1) | Gable, Shed, Hip, Saltbox, Butterfly, Mansard, Bóveda + **9 cubiertas**: zinc, eternit, termoacústica, metálica, española, romana, plana, tejuela |
 | 🚪 Puertas / Ventanas (v1.1) | Presets CO: puertas 0.70–1.20 m, ventanas 1.00×1.00 → 2.40×2.20 + antepecho; modos Draw y Place |
 | 🪜 Escaleras | Clásicas (presets) + nuevas: recta, en L, caracol y **rampa 8%** |
@@ -146,13 +162,16 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.6.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.7.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
 ├── af_wall_path.py      # Geometría y validación pura de trazos de muro
+├── af_floor_geometry.py # Triangulación y recorte poligonal puro (testeable)
+├── af_outline_draw.py   # Interacción modal común de contornos cerrados
 ├── af_wall.py           # Muros paramétricos y herramienta Draw Wall / Room
-├── af_slab.py           # Losas: 4 sistemas constructivos (v1.2)
+├── af_slab.py           # Losas: 4 sistemas + Draw Slab Outline
+├── af_floor.py          # Patrones de piso + contornos poligonales
 ├── af_roof.py           # Techos + 9 cubiertas (v1.1)
 ├── af_door.py           # Puertas + presets CO (v1.1)
 ├── af_window.py         # Ventanas + presets CO (v1.1)
@@ -174,6 +193,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.7.0** — Dibujo de contornos de losa/piso, recorte poligonal y ciclo de booleanos paramétricos
 - **v1.6.0** — Dibujo de muros conectados y recintos cerrados con esquinas automáticas
 - **v1.5.2** — Correcciones al hot-reload, conteo de cantidades, CSV seguro y CI
 - **v1.5.1** — Hotfix: imports/reload tolerantes (un módulo ausente ya no tumba el addon)
@@ -206,9 +226,9 @@ python -m unittest discover -s tests -v
 ```
 
 Comprueba sintaxis compatible con Python 3.10, unicidad de identificadores
-Blender y regresiones del cálculo/exportación de cantidades y de la geometría
-pura de los trazos de muro. La geometría generada y la interfaz modal deben
-probarse además dentro de Blender; CI no sustituye esa validación.
+Blender, cantidades/CSV, triangulación y recorte poligonal, además del flujo de
+creación/actualización de booleanos. La geometría de BMesh y la interacción
+modal deben validarse además dentro de Blender; CI no sustituye esa prueba.
 
 ## 🛣️ Roadmap
 

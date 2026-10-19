@@ -100,6 +100,31 @@ class QuantityCollectionTests(unittest.TestCase):
         ])
         self.assertIn("4,00x3,00", rows[0][5])
 
+    def test_custom_floor_uses_polygon_area_instead_of_its_bounding_box(self):
+        floor_props = SimpleNamespace(
+            is_af_floor=True,
+            object_name="AF_CustomFloor",
+            pattern="REGULAR",
+            width=4.0,
+            depth=4.0,
+            outline_enabled=True,
+            outline_vertices=[
+                SimpleNamespace(x=0.0, y=0.0),
+                SimpleNamespace(x=4.0, y=0.0),
+                SimpleNamespace(x=4.0, y=4.0),
+                SimpleNamespace(x=2.0, y=2.0),
+                SimpleNamespace(x=0.0, y=4.0),
+            ],
+        )
+        floor = SimpleNamespace(
+            name="AF_CustomFloor", archiforge_floor=floor_props)
+
+        rows = collect_quantities([floor])
+
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0][3], 12.0)
+        self.assertIn("área poligonal", rows[0][5])
+
     def test_plural_stair_property_is_included(self):
         stair_props = SimpleNamespace(
             is_af_stair=True,

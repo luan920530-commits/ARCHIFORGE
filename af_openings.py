@@ -130,7 +130,9 @@ class AF_OpeningProperties(PropertyGroup):
     lintel : BoolProperty(name="Lintel", default=False,
                           update=af_opening_update)
 
-    target_wall : StringProperty(name="Target Wall", default="")
+    target_wall : StringProperty(
+        name="Target Wall", default="", update=af_opening_update,
+    )
     cut_opening : BoolProperty(name="Cut in Wall", default=False,
                                update=af_opening_update)
 
@@ -457,61 +459,168 @@ def _rebuild_opening_mesh(obj, props):
         pass
 
 
+def _find_opening_cutters(obj):
+    """Find this opening's cutter(s), including pre-marker legacy objects."""
+    cutters = []
+    expected_name = obj.name + "_CUTTER"
+    for candidate in bpy.data.objects:
+        try:
+            tagged = bool(candidate.get("archiforge_opening_cutter", False))
+            owner = candidate.get("archiforge_opening_owner", "")
+        except (AttributeError, TypeError):
+            tagged = False
+            owner = ""
+        if (candidate.parent is obj and
+                (tagged or candidate.name == expected_name
+                 or candidate.name.endswith("_CUTTER"))):
+            cutters.append(candidate)
+        elif tagged and owner == obj.name:
+            cutters.append(candidate)
+    return cutters
+
+
+def _remove_opening_cutters(obj, cutters):
+    """Remove managed Boolean modifiers before deleting their cutter meshes."""
+    modifier_name = "AF_CUT_" + obj.name
+    if len(modifier_name) > 60:
+        modifier_name = modifier_name[:60]
+    for target in list(bpy.data.objects):
+        for modifier in list(target.modifiers):
+            if modifier.type != 'BOOLEAN':
+                continue
+            if (modifier.object in cutters
+                    or modifier.name == modifier_name):
+                try:
+                    target.modifiers.remove(modifier)
+                except (ReferenceError, RuntimeError, TypeError):
+                    pass
+
+    for cutter in cutters:
+        mesh = cutter.data if cutter.type == 'MESH' else None
+        try:
+            bpy.data.objects.remove(cutter, do_unlink=True)
+        except (ReferenceError, RuntimeError, TypeError):
+            continue
+        if mesh is not None and mesh.users == 0:
+            try:
+                bpy.data.meshes.remove(mesh)
+            except (ReferenceError, RuntimeError, TypeError):
+                pass
+
+
 def _apply_wall_cut(obj, props):
-    """Booleana DIFFERENCE en el muro objetivo con cutter hijo."""
-    cut_name = obj.name + "_CUTTER"
-    mod_name = "AF_CUT_" + obj.name
-    if len(mod_name) > 60:
-        mod_name = mod_name[:60]
+    """Maintain a live DIFFERENCE Boolean on the selected target wall."""
+    cutters = _find_opening_cutters(obj)
     wall = None
     if props.cut_opening and props.target_wall:
         wall = bpy.data.objects.get(props.target_wall)
-        if wall is None or wall.type != 'MESH':
+        if (wall is None or wall.type != 'MESH' or wall is obj):
             wall = None
-    old_cut = bpy.data.objects.get(cut_name)
+
     if wall is None:
-        if old_cut is not None:
+        _remove_opening_cutters(obj, cutters)
+        return
+
+    # Reuse a single cutter and remove stale duplicates/modifiers when the
+    # target wall changes or the file contains legacy duplicate cutters.
+    old_cut = cutters[0] if cutters else None
+    if len(cutters) > 1:
+        _remove_opening_cutters(obj, cutters[1:])
+
+    cut_name = obj.name + "_CUTTER"
+    if old_cut is None:
+        mesh = bpy.data.meshes.new(cut_name)
+        old_cut = bpy.data.objects.new(cut_name, mesh)
+        try:
+            collection = (obj.users_collection[0] if obj.users_collection
+                          else bpy.context.collection)
+            collection.objects.link(old_cut)
+            mesh.from_pydata(
+                [
+                    (-0.5, -0.5, -0.5), (0.5, -0.5, -0.5),
+                    (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),
+                    (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5),
+                    (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5),
+                ],
+                [],
+                [
+                    (0, 3, 2, 1), (4, 5, 6, 7),
+                    (0, 1, 5, 4), (2, 3, 7, 6),
+                    (0, 4, 7, 3), (1, 2, 6, 5),
+                ],
+            )
+            mesh.update()
+        except Exception:
             try:
                 bpy.data.objects.remove(old_cut, do_unlink=True)
             except Exception:
                 pass
-        return
-    is_win = props.item_type.startswith('WIN')
-    z0 = max(props.sill_height, 0.0) if is_win else 0.0
-    cw, ch = max(props.width, 0.1) + 0.02, max(props.height,
-                                               0.1) + 0.02
-    cd = max(props.depth, 0.05) + 0.40
-    if old_cut is None:
-        me = bpy.data.meshes.new(cut_name)
-        old_cut = bpy.data.objects.new(cut_name, me)
-        try:
-            bpy.context.collection.objects.link(old_cut)
-        except Exception:
-            pass
-        bm = __import__('bmesh').new()
-        __import__('bmesh').ops.create_cube(bm, size=1.0)
-        bm.to_mesh(me)
-        bm.free()
-    old_cut.parent = obj
-    old_cut.location = (0, 0, z0 + (max(props.height, 0.1)) / 2)
-    old_cut.scale = (cw, cd, ch)
-    old_cut.hide_viewport = True
-    old_cut.hide_render = True
-    old_cut.display_type = 'WIRE'
-    mod = wall.modifiers.get(mod_name)
-    if mod is None:
-        try:
-            mod = wall.modifiers.new(mod_name, 'BOOLEAN')
-        except Exception:
+            if mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
             return
-    if mod.type == 'BOOLEAN':
+
+    # Remove any modifier this opening previously left on another wall.
+    for target in list(bpy.data.objects):
+        for modifier in list(target.modifiers):
+            if modifier.type == 'BOOLEAN' and modifier.object is old_cut:
+                if target is not wall:
+                    try:
+                        target.modifiers.remove(modifier)
+                    except (ReferenceError, RuntimeError, TypeError):
+                        pass
+
+    is_window = props.item_type.startswith('WIN')
+    sill = max(float(props.sill_height), 0.0) if is_window else 0.0
+    width = max(float(props.width), 0.1)
+    height = max(float(props.height), 0.1)
+    depth = max(float(props.depth), 0.05)
+    cutter_width = width + 0.02
+    cutter_height = height + 0.02
+    cutter_depth = depth + 0.40
+
+    old_cut.parent = obj
+    old_cut.matrix_parent_inverse = Matrix.Identity(4)
+    old_cut.location = (0.0, 0.0, sill + height * 0.5)
+    old_cut.rotation_euler = (0.0, 0.0, 0.0)
+    old_cut.scale = (cutter_width, cutter_depth, cutter_height)
+    old_cut.hide_render = True
+    old_cut.hide_set(True)
+    old_cut.display_type = 'WIRE'
+    old_cut["archiforge_opening_cutter"] = True
+    old_cut["archiforge_opening_owner"] = obj.name
+
+    modifier_name = "AF_CUT_" + obj.name
+    if len(modifier_name) > 60:
+        modifier_name = modifier_name[:60]
+    modifier = None
+    for existing in list(wall.modifiers):
+        if (existing.type == 'BOOLEAN'
+                and (existing.object is old_cut
+                     or existing.name == modifier_name)):
+            modifier = existing
+            break
+    if modifier is None:
         try:
-            mod.operation = 'DIFFERENCE'
-            mod.object = old_cut
-            if hasattr(mod, 'solver'):
-                mod.solver = 'EXACT'
+            modifier = wall.modifiers.new(modifier_name, 'BOOLEAN')
         except Exception:
-            pass
+            _remove_opening_cutters(obj, [old_cut])
+            return
+
+    try:
+        modifier.operation = 'DIFFERENCE'
+        modifier.object = old_cut
+        if hasattr(modifier, 'solver'):
+            modifier.solver = 'EXACT'
+        modifier.show_viewport = True
+        modifier.show_render = True
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        _remove_opening_cutters(obj, [old_cut])
+        return
+
+    try:
+        bpy.context.view_layer.update()
+    except (AttributeError, RuntimeError, TypeError):
+        pass
 
 
 def _setup_opening_materials(obj):
@@ -566,6 +675,7 @@ def _create_opening_object(context, name="AF_Opening"):
         pass
     context.view_layer.objects.active = obj
     obj.select_set(True)
+    previous_suspend = _SUSPEND
     _SUSPEND = True
     try:
         props = obj.archiforge_opening
@@ -573,7 +683,7 @@ def _create_opening_object(context, name="AF_Opening"):
         props.object_name = obj.name
         props.af_version = AF_OPEN_VERSION
     finally:
-        _SUSPEND = False
+        _SUSPEND = previous_suspend
     _setup_opening_materials(obj)
     return obj, props
 
@@ -581,13 +691,14 @@ def _create_opening_object(context, name="AF_Opening"):
 def _apply_type_defaults(props, item_type):
     global _SUSPEND
     w, d, h = AF_OPEN_DEFAULTS.get(item_type, (0.9, 0.15, 2.1))
+    previous_suspend = _SUSPEND
     _SUSPEND = True
     try:
         props.width = w
         props.depth = d
         props.height = h
     finally:
-        _SUSPEND = False
+        _SUSPEND = previous_suspend
 
 
 class ARCHIFORGE_OT_opening(Operator):
@@ -606,8 +717,18 @@ class ARCHIFORGE_OT_opening(Operator):
                           min=0.05, unit='LENGTH')
     height : FloatProperty(name="Height", default=2.10, min=0.10,
                            unit='LENGTH')
+    cut_opening : BoolProperty(name="Cut in Target Wall", default=False)
+    target_wall : StringProperty(name="Target Wall", default="")
 
     def invoke(self, context, event):
+        active = context.active_object
+        wall_props = getattr(active, "archiforge_wall", None)
+        if (not self.target_wall and active is not None
+                and active.type == 'MESH' and wall_props is not None
+                and wall_props.is_af_wall
+                and wall_props.object_name == active.name):
+            self.target_wall = active.name
+            self.cut_opening = True
         return context.window_manager.invoke_props_dialog(self)
 
     def draw(self, context):
@@ -623,10 +744,27 @@ class ARCHIFORGE_OT_opening(Operator):
         sub.prop(self, "width")
         sub.prop(self, "depth")
         sub.prop(self, "height")
+        col.separator()
+        col.prop(self, "cut_opening")
+        target = col.column(align=True)
+        target.enabled = self.cut_opening
+        target.prop_search(self, "target_wall", context.blend_data,
+                           "objects", text="Wall")
 
     def execute(self, context):
         global _SUSPEND
+        active_before_create = context.active_object
+        target_wall = self.target_wall
+        cut_opening = self.cut_opening
+        wall_props = getattr(active_before_create, "archiforge_wall", None)
+        if (not target_wall and active_before_create is not None
+                and active_before_create.type == 'MESH'
+                and wall_props is not None and wall_props.is_af_wall
+                and wall_props.object_name == active_before_create.name):
+            target_wall = active_before_create.name
+            cut_opening = True
         obj, props = _create_opening_object(context, "AF_Opening")
+        previous_suspend = _SUSPEND
         _SUSPEND = True
         try:
             props.item_type = self.item_type
@@ -636,9 +774,12 @@ class ARCHIFORGE_OT_opening(Operator):
                 props.width = self.width
                 props.depth = self.depth
                 props.height = self.height
+            props.target_wall = target_wall
+            props.cut_opening = cut_opening
         finally:
-            _SUSPEND = False
+            _SUSPEND = previous_suspend
         _rebuild_opening_mesh(obj, props)
+        _apply_wall_cut(obj, props)
         self.report({'INFO'}, f"Opening created: {obj.name}")
         return {'FINISHED'}
 
