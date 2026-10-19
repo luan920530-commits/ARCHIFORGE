@@ -17,6 +17,8 @@ Todos los cambios notables del proyecto. Formato basado en
   polígonos cerrados degenerados o autointersectados.
 - Cálculos puros y pruebas de geometría de caminos en `af_wall_path.py`, sin
   depender de Blender.
+- Conjunto de 24 iconos PNG originales, incluido el logotipo de ArchiForge y
+  pictogramas para los módulos principales.
 
 ### Mejorado
 - El generador de muros y sus zócalos/cornisas conectan cíclicamente los

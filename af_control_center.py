@@ -155,7 +155,8 @@ class ARCHIFORGE_OT_control_center(Operator):
 
         # ── Encabezado + pestañas ──
         row = layout.row(align=True)
-        row.label(text="ArchiForge Control Center", icon='HOME')
+        row.label(text="ArchiForge Control Center",
+                   **_icon_kw(icons, "archiforge", 'HOME'))
         layout.prop(self, "tab", expand=True)
 
         if self.tab == 'STRUCT':
@@ -173,7 +174,7 @@ class ARCHIFORGE_OT_control_center(Operator):
     def _draw_struct(self, layout, icons, av):
         # — Muros —
         box = layout.box()
-        box.label(text="Walls", icon='SNAP_FACE')
+        box.label(text="Walls", **_icon_kw(icons, "wall", 'SNAP_FACE'))
         row = box.row(align=True)
         if _op_exists("archiforge.wall"):
             row.operator(
@@ -181,14 +182,14 @@ class ARCHIFORGE_OT_control_center(Operator):
                 **_icon_kw(icons, "wall", 'SNAP_FACE'))
         if _op_exists("archiforge.wall_draw"):
             row.operator("archiforge.wall_draw", text="Draw",
-                         icon='GREASEPENCIL')
+                         **_icon_kw(icons, "wall_draw", 'GREASEPENCIL'))
         if _op_exists("archiforge.wall_from_curve"):
             row.operator("archiforge.wall_from_curve", text="",
                          icon='CURVE_DATA')
 
         # — Losas —
         box = layout.box()
-        box.label(text="Slabs", icon='MESH_CUBE')
+        box.label(text="Slabs", **_icon_kw(icons, "slab", 'MESH_CUBE'))
         row = box.row(align=True)
         if _op_exists("archiforge.slab_from_curve"):
             row.operator(
@@ -206,7 +207,7 @@ class ARCHIFORGE_OT_control_center(Operator):
 
         # — Techos —
         box = layout.box()
-        box.label(text="Roofs", icon='HOME')
+        box.label(text="Roofs", **_icon_kw(icons, "roof", 'HOME'))
         row = box.row(align=True)
         if _op_exists("archiforge.roof_preset_menu"):
             row.operator(
@@ -228,7 +229,7 @@ class ARCHIFORGE_OT_control_center(Operator):
         # — Estructura+ (columnas, vigas,…) —
         if _op_exists("archiforge.structure"):
             box = layout.box()
-            box.label(text="Structure+", icon='MESH_CUBE')
+            box.label(text="Structure+", **_icon_kw(icons, "structure", 'MESH_CUBE'))
             grid = [('FOOTING', "Footing"), ('COLUMN', "Column"),
                     ('BEAM', "Beam"), ('RIBBED_SLAB', "Ribbed"),
                     ('GRID', "Grid"), ('LEVELS', "Levels")]
@@ -238,11 +239,11 @@ class ARCHIFORGE_OT_control_center(Operator):
                     if tid in av['struct']:
                         row.operator(
                             "archiforge.structure", text=txt,
-                            icon='MESH_CUBE').item_type = tid
+                            **_icon_kw(icons, "structure", 'MESH_CUBE')).item_type = tid
 
         # — Extras estructura —
         box = layout.box()
-        box.label(text="Extras", icon='PLUS')
+        box.label(text="Extras", **_icon_kw(icons, "truss", 'PLUS'))
         row = box.row(align=True)
         if _op_exists("archiforge.truss"):
             row.operator(
@@ -274,7 +275,7 @@ class ARCHIFORGE_OT_control_center(Operator):
     def _draw_open(self, layout, icons, av):
         # — Puertas —
         box = layout.box()
-        box.label(text="Doors", icon='MESH_PLANE')
+        box.label(text="Doors", **_icon_kw(icons, "door", 'MESH_PLANE'))
         row = box.row(align=True)
         if _op_exists("archiforge.door_preset_menu"):
             row.operator(
@@ -291,7 +292,7 @@ class ARCHIFORGE_OT_control_center(Operator):
 
         # — Ventanas —
         box = layout.box()
-        box.label(text="Windows", icon='MESH_PLANE')
+        box.label(text="Windows", **_icon_kw(icons, "window", 'MESH_PLANE'))
         row = box.row(align=True)
         if _op_exists("archiforge.window_preset_menu"):
             row.operator(
@@ -309,7 +310,7 @@ class ARCHIFORGE_OT_control_center(Operator):
         # — Puertas/ventanas paramétricas (nuevas) —
         if _op_exists("archiforge.opening"):
             box = layout.box()
-            box.label(text="Doors & Windows+", icon='MESH_CUBE')
+            box.label(text="Doors & Windows+", **_icon_kw(icons, "opening", 'MESH_CUBE'))
             grid = [('DOOR_SINGLE', "Door 1H"),
                     ('DOOR_DOUBLE', "Door 2H"),
                     ('DOOR_SLIDING', "Door Slid."),
@@ -322,11 +323,11 @@ class ARCHIFORGE_OT_control_center(Operator):
                     if tid in av['open']:
                         row.operator(
                             "archiforge.opening", text=txt,
-                            icon='MESH_CUBE').item_type = tid
+                            **_icon_kw(icons, "opening", 'MESH_CUBE')).item_type = tid
 
         # — Escaleras —
         box = layout.box()
-        box.label(text="Stairs", icon='EXPORT')
+        box.label(text="Stairs", **_icon_kw(icons, "stair", 'EXPORT'))
         row = box.row(align=True)
         if _op_exists("archiforge.stair_preset_menu"):
             row.operator(
@@ -341,28 +342,33 @@ class ARCHIFORGE_OT_control_center(Operator):
                 if tid in av['stair']:
                     row.operator(
                         "archiforge.stairs", text=txt,
-                        icon='ADD').item_type = tid
+                        **_icon_kw(icons, "stair", 'ADD')).item_type = tid
 
     # ═══════════════════════════════════════════════════════
     #  TAB: INTERIORES
     # ═══════════════════════════════════════════════════════
     def _grid(self, box, op, avail, items, icon='MESH_CUBE',
-              per_row=3, custom=False):
+              per_row=3, custom=False, icons=None, icon_name=None):
         """Rejilla genérica de botones item_type."""
         shown = [(t, x) for t, x in items if t in avail]
         if custom:
             shown.append((None, "Custom…"))
+        icon_kwargs = (
+            _icon_kw(icons or {}, icon_name, icon)
+            if icon_name else {'icon': icon}
+        )
         for i in range(0, len(shown), per_row):
             row = box.row(align=True)
             for tid, txt in shown[i:i + per_row]:
-                op_call = row.operator(op, text=txt, icon=icon)
+                kwargs = {'icon': 'ADD'} if tid is None else icon_kwargs
+                op_call = row.operator(op, text=txt, **kwargs)
                 if tid is not None:
                     op_call.item_type = tid
 
     def _draw_inter(self, layout, icons, av):
         if _op_exists("archiforge.bathroom"):
             box = layout.box()
-            box.label(text="Bathroom", icon='SPHERE')
+            box.label(text="Bathroom", **_icon_kw(icons, "bathroom", 'SPHERE'))
             self._grid(box, "archiforge.bathroom", av['bath'], [
                 ('TOILET', "Toilet"), ('BIDET', "Bidet"),
                 ('PEDESTAL_SINK', "Pedestal"),
@@ -371,22 +377,24 @@ class ARCHIFORGE_OT_control_center(Operator):
                 ('SHOWER', "Shower"), ('BATHTUB', "Bathtub"),
                 ('MIRROR', "Mirror"),
                 ('TOWEL_RAIL', "Towel Rail")],
-                icon='SPHERE', custom=True)
+                icon='SPHERE', custom=True, icons=icons,
+                icon_name='bathroom')
 
         if _op_exists("archiforge.kitchen"):
             box = layout.box()
-            box.label(text="Kitchen", icon='MESH_CUBE')
+            box.label(text="Kitchen", **_icon_kw(icons, "kitchen", 'MESH_CUBE'))
             self._grid(box, "archiforge.kitchen", av['kit'], [
                 ('FRIDGE', "Fridge"), ('STOVE', "Stove"),
                 ('RANGE_HOOD', "Hood"),
                 ('SINK_CABINET', "Sink"),
                 ('DISHWASHER', "Dishwash."),
                 ('MICROWAVE', "Microwave"),
-                ('UTENSILS', "Utensils")], custom=True)
+                ('UTENSILS', "Utensils")], custom=True, icons=icons,
+                icon_name='kitchen')
 
         if _op_exists("archiforge.furniture"):
             box = layout.box()
-            box.label(text="Furniture", icon='MESH_CUBE')
+            box.label(text="Furniture", **_icon_kw(icons, "furniture", 'MESH_CUBE'))
             self._grid(box, "archiforge.furniture", av['furn'], [
                 ('DINING_CHAIR', "D.Chair"),
                 ('OFFICE_CHAIR', "O.Chair"),
@@ -395,11 +403,12 @@ class ARCHIFORGE_OT_control_center(Operator):
                 ('DINING_TABLE', "D.Table"),
                 ('BED', "Bed (CO)"),
                 ('NIGHTSTAND', "Nochero"),
-                ('DRESSER', "Chifonier"), ('SHELF', "Shelf")])
+                ('DRESSER', "Chifonier"), ('SHELF', "Shelf")],
+                icons=icons, icon_name='furniture')
 
         if _op_exists("archiforge.decor"):
             box = layout.box()
-            box.label(text="Decor", icon='LIGHT')
+            box.label(text="Decor", **_icon_kw(icons, "decor", 'LIGHT'))
             self._grid(box, "archiforge.decor", av['decor'], [
                 ('PLANTER', "Planter"),
                 ('FLOOR_LAMP', "F.Lamp"),
@@ -407,7 +416,7 @@ class ARCHIFORGE_OT_control_center(Operator):
                 ('VASE_SET', "Vases"),
                 ('WALL_ART', "Wall Art"), ('CLOCK', "Clock"),
                 ('BOOKS', "Books"), ('TV', "TV"), ('RUG', "Rug")],
-                icon='LIGHT', custom=True)
+                icon='LIGHT', custom=True, icons=icons, icon_name='decor')
 
     # ═══════════════════════════════════════════════════════
     #  TAB: ELÉCTRICO + HERRAMIENTAS
@@ -415,7 +424,7 @@ class ARCHIFORGE_OT_control_center(Operator):
     def _draw_tools(self, layout, icons, av):
         if _op_exists("archiforge.electrical"):
             box = layout.box()
-            box.label(text="Electrical", icon='PLUGIN')
+            box.label(text="Electrical", **_icon_kw(icons, "electrical", 'PLUGIN'))
             self._grid(box, "archiforge.electrical", av['elec'], [
                 ('OUTLET', "Outlet"), ('SWITCH', "Switch"),
                 ('DATA', "Data"), ('BULB', "Bulb"),
@@ -424,7 +433,8 @@ class ARCHIFORGE_OT_control_center(Operator):
                 ('DOWNLIGHT', "Downlight"),
                 ('SCONCE', "Sconce"),
                 ('PANEL_BOARD', "Panel")],
-                icon='PLUGIN', custom=True)
+                icon='PLUGIN', custom=True, icons=icons,
+                icon_name='electrical')
             if _op_exists("archiforge.electrical_light"):
                 row = box.row(align=True)
                 row.operator("archiforge.electrical_light",
@@ -432,19 +442,20 @@ class ARCHIFORGE_OT_control_center(Operator):
                              icon='LIGHT')
 
         box = layout.box()
-        box.label(text="Quantities", icon='SPREADSHEET')
+        box.label(text="Quantities", **_icon_kw(icons, "quantities", 'SPREADSHEET'))
         row = box.row(align=True)
         if _op_exists("archiforge.quantities_export"):
             row.operator("archiforge.quantities_export",
-                         text="Export CSV (Excel)", icon='EXPORT')
+                         text="Export CSV (Excel)",
+                         **_icon_kw(icons, "quantities", 'EXPORT'))
 
         box = layout.box()
-        box.label(text="Tools", icon='TOOL_SETTINGS')
+        box.label(text="Tools", **_icon_kw(icons, "control_center", 'TOOL_SETTINGS'))
         row = box.row(align=True)
         if _op_exists("archiforge.auto_boolean"):
             row.operator(
                 "archiforge.auto_boolean", text="Auto Boolean",
-                icon='MOD_BOOLEAN').mode = 'HYBRID'
+                **_icon_kw(icons, "boolean", 'MOD_BOOLEAN')).mode = 'HYBRID'
         row = box.row(align=True)
         if _op_exists("archiforge.wall_from_slab"):
             row.operator(

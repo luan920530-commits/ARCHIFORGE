@@ -42,6 +42,16 @@ independientes a mano.
 
 ---
 
+## 🎨 Iconos propios
+
+El addon incluye **24 iconos PNG originales** para la marca y sus módulos
+principales, con un estilo arquitectónico consistente. Se cargan como vistas
+previas de Blender y conservan un icono nativo de respaldo si falta algún
+recurso. No se descargan archivos ni se instalan dependencias al usar el addon;
+las instrucciones para editar o regenerar los iconos están en [`icons/README.md`](icons/README.md).
+
+---
+
 ## ✨ Módulos
 
 | Módulo | Contenido |
@@ -156,7 +166,7 @@ ArchiForge/
 ├── af_openings.py       # Puertas/ventanas paramétricas
 ├── af_quantities.py     # Integración de exportación CSV con Blender
 ├── af_quantities_io.py  # Cálculos/CSV puros, testeables sin Blender
-├── icons/               # Iconos opcionales (fallback nativo de Blender)
+├── icons/               # 24 iconos PNG originales + fuente de regeneración
 └── tests/               # Regresiones y comprobaciones estáticas
 ```
 
