@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.8.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.9.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,

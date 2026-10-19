@@ -5,6 +5,18 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.9.0] — 2026-10-19 — Idioma del addon y correcciones de puertas
+
+### Agregado
+- Selector de idioma English/Español en las preferencias de ArchiForge,
+  independiente del idioma configurado en Blender.
+
+### Corregido
+- Posición local de la manija de puertas de una hoja: con bisagra a la derecha
+  ahora se calcula desde el canto libre de la hoja y queda vinculada al giro.
+
+---
+
 ## [1.8.0] — 2026-10-19 — Biblioteca paramétrica por ambientes
 
 ### Agregado

@@ -547,7 +547,15 @@ class AF_DoorGenerator:
         hh  = p.handle_height
         ho  = p.handle_offset
         mi  = p.mat_handle
-        hx  = (w - ho) if p.hinge_side == 'LEFT' else ho
+        # Handle position is measured from the free edge, not the hinge.
+        # Match the leaf's local coordinates (including the construction gap),
+        # so RIGHT-hinged leaves keep their handle on the opposite/free stile.
+        gap = 0.003
+        if p.door_type in ('SINGLE', 'POCKET'):
+            leaf_w = w - gap * 2
+            hx = (leaf_w + gap - ho) if p.hinge_side == 'LEFT' else (gap + ho)
+        else:
+            hx = (w - ho) if p.hinge_side == 'LEFT' else ho
         hy  = off
 
         if p.handle_type == 'LEVER':

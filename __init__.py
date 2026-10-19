@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 8, 0),
+    "version"     : (1, 9, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -347,6 +347,14 @@ def _available_ids(modname, attr, fallback):
 class ArchiForge_Pref(AddonPreferences):
     bl_idname = __name__
 
+    language : EnumProperty(
+        name="Addon language",
+        description="Language used by ArchiForge only",
+        items=[('EN', "English", "Show ArchiForge in English"),
+               ('ES', "Español", "Mostrar ArchiForge en español")],
+        default='EN',
+    )
+
     # ── Pestaña activa en preferencias ──────────────────────
     pref_tab : EnumProperty(
         name  = "Tab",
@@ -563,6 +571,7 @@ class ArchiForge_Pref(AddonPreferences):
 
         box = col.box()
         box.label(text="Interface", **_icon_kw(icons, "control_center", 'WINDOW'))
+        box.prop(self, "language")
         box.prop(self, "create_submenu")
         box.prop(self, "unit_system")
 
