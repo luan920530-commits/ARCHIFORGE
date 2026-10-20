@@ -413,13 +413,25 @@ class AF_WallGenerator:
 #  UPDATE CALLBACKS
 # ════════════════════════════════════════════════════════════
 def _find_wall_object(props):
-    name = props.object_name
+    """Object owning ``props`` (the wall group or one of its segments).
+
+    RNA wrappers are re-created on every access, so identity (``is``) never
+    matches: compare with ``==`` and also look inside ``segments`` so the
+    per-segment update callbacks find their wall.
+    """
+    name = getattr(props, "object_name", "")
     if name and name in bpy.data.objects:
         return bpy.data.objects[name]
     for obj in bpy.data.objects:
-        if obj.type == 'MESH' and hasattr(obj, AF_WALL_PROP):
-            if getattr(obj, AF_WALL_PROP) is props:
-                return obj
+        if obj.type != 'MESH':
+            continue
+        wall = getattr(obj, AF_WALL_PROP, None)
+        if wall is None or not wall.is_af_wall:
+            continue
+        if wall == props:
+            return obj
+        if any(seg == props for seg in getattr(wall, "segments", ())):
+            return obj
     return None
 
 
@@ -544,8 +556,12 @@ def _rebuild_wall_mesh(obj, props):
         me.use_auto_smooth = False
 
     # ── Aplicar material index ────────────────────────────────
-    if "material_index" in me.polygon_layers_int:
-        layer = me.polygon_layers_int["material_index"]
+    # Blender <= 3.6 exports the bmesh int layer as polygon_layers_int and
+    # its values must be copied; 4.0+ removed that API and a face layer
+    # named "material_index" already *is* the material index.
+    _layers = getattr(me, "polygon_layers_int", None)
+    if _layers is not None and "material_index" in _layers:
+        layer = _layers["material_index"]
         for poly in me.polygons:
             poly.material_index = layer.data[poly.index].value
 

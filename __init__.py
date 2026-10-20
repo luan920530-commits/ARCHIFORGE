@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 14, 0),
+    "version"     : (1, 14, 1),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -1536,8 +1536,6 @@ def menu_func(self, context):
 # ════════════════════════════════════════════════════════════
 _modules = [
     af_material,
-    af_snap,
-    af_manipulator,
     af_reference_point,
     af_preset,
     af_autoboolean,
@@ -1565,6 +1563,11 @@ _modules = [
     af_control_center,
     af_rendering,
     af_panel,
+    # af_snap / af_manipulator own sub-panels whose ``bl_parent_id`` lives in
+    # af_panel (ARCHIFORGE_PT_snap_tools / ARCHIFORGE_PT_tools): Blender only
+    # accepts a child panel once its parent is registered, so they go after it.
+    af_snap,
+    af_manipulator,
     af_menu,
 ]
 

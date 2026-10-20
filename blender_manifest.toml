@@ -12,7 +12,7 @@
 schema_version = "1.0.0"
 
 id = "archiforge"
-version = "1.12.0"
+version = "1.14.1"
 name = "ArchiForge"
 tagline = "Parametric walls, slabs, roofs, stairs, openings and interiors"
 maintainer = "ArchiForge Devs"
@@ -28,7 +28,7 @@ website = "https://github.com/luan920530-commits/ARCHIFORGE"
 tags = ["Add Mesh", "Modeling", "Object", "3D View"]
 
 # Extensions exist since Blender 4.2 LTS.
-blender_version_min = "3.3.0"
+blender_version_min = "4.2.0"
 
 license = [
   "SPDX:GPL-3.0-or-later",

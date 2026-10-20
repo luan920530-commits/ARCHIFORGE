@@ -137,6 +137,32 @@ class BMesh:
         pass
 
 
+def _enum_property(*args, **kwargs):
+    """Stand-in for ``bpy.props.EnumProperty`` with Blender's argument rules.
+
+    Mirrors the checks in ``bpy_props.cc`` (identical in 3.3 and 4.2): a
+    callback ``items`` only accepts an integer ``default`` and a static
+    ``default`` must name one of the items. Real Blender raises at class
+    creation, which silently drops the whole module from ``register()``.
+    """
+    items = kwargs.get("items", args[0] if args else None)
+    default = kwargs.get("default")
+    if callable(items):
+        if default is not None and not isinstance(default, int):
+            raise TypeError(
+                "EnumProperty(...): 'default' can only be an integer when "
+                "'items' is a function")
+    elif items is not None and default is not None:
+        identifiers = {item[0] for item in items}
+        wanted = default if isinstance(default, (set, frozenset)) else {default}
+        missing = sorted(str(d) for d in wanted if d not in identifiers)
+        if missing:
+            raise TypeError(
+                "EnumProperty(...): default {} not found in enum members".format(
+                    ", ".join(missing)))
+    return None
+
+
 def _noop(*args, **kwargs):
     return None
 
@@ -258,15 +284,31 @@ def install():
     for name in ("PropertyGroup", "Operator", "Panel", "Menu", "UIList",
                  "Object", "Scene", "AddonPreferences", "SpaceView3D"):
         setattr(bpy_types, name, type(name, (_Base,), {}))
+    # Any other bpy.types name (Light, Collection, Header, ...) is created on
+    # demand so every af_*.py module can be imported under the stub.
+    bpy_types.__getattr__ = lambda name: (
+        setattr(bpy_types, name, type(name, (_Base,), {})) or getattr(bpy_types, name)
+        if not name.startswith("__") else (_ for _ in ()).throw(AttributeError(name)))
     bpy_props = types.ModuleType("bpy.props")
     for name in ("StringProperty", "BoolProperty", "IntProperty",
-                 "FloatProperty", "EnumProperty", "CollectionProperty",
+                 "FloatProperty", "CollectionProperty",
                  "PointerProperty", "FloatVectorProperty",
                  "IntVectorProperty"):
         setattr(bpy_props, name, _noop)
+    bpy_props.EnumProperty = _enum_property
     bpy_utils = types.ModuleType("bpy.utils")
     bpy_utils.register_class = _noop
     bpy_utils.unregister_class = _noop
+
+    class _PreviewCollection(dict):
+        def load(self, name, path, kind, force_reload=False):
+            self[name] = types.SimpleNamespace(icon_id=0, image_size=(128, 128))
+            return self[name]
+
+    bpy_utils_previews = types.ModuleType("bpy.utils.previews")
+    bpy_utils_previews.new = _PreviewCollection
+    bpy_utils_previews.remove = _noop
+    bpy_utils.previews = bpy_utils_previews
     bpy.types = bpy_types
     bpy.props = bpy_props
     bpy.utils = bpy_utils
@@ -295,15 +337,43 @@ def install():
     mathutils.Matrix = _Transform
     mathutils.Euler = _Transform
 
+    # Drawing / IO helpers imported at module level by a few af_*.py files.
+    blf = types.ModuleType("blf")
+    for name in ("size", "position", "draw", "color", "enable", "disable",
+                 "shadow", "shadow_offset"):
+        setattr(blf, name, _noop)
+    blf.dimensions = lambda font_id, text: (len(text) * 7.0, 12.0)
+    gpu = types.ModuleType("gpu")
+    gpu.shader = types.SimpleNamespace(from_builtin=_noop)
+    gpu.state = types.SimpleNamespace(blend_set=_noop, line_width_set=_noop,
+                                      depth_test_set=_noop, point_size_set=_noop)
+    gpu.types = types.SimpleNamespace(GPUBatch=object, GPUShader=object)
+    gpu_extras = types.ModuleType("gpu_extras")
+    gpu_extras_batch = types.ModuleType("gpu_extras.batch")
+    gpu_extras_batch.batch_for_shader = _noop
+    gpu_extras.batch = gpu_extras_batch
+    bpy_extras = types.ModuleType("bpy_extras")
+    bpy_extras_io = types.ModuleType("bpy_extras.io_utils")
+    bpy_extras_io.ExportHelper = type("ExportHelper", (), {})
+    bpy_extras_io.ImportHelper = type("ImportHelper", (), {})
+    bpy_extras.io_utils = bpy_extras_io
+
     sys.modules.update({
         "bpy": bpy,
         "bpy.types": bpy_types,
         "bpy.props": bpy_props,
         "bpy.utils": bpy_utils,
+        "bpy.utils.previews": bpy_utils_previews,
         "bpy.app": bpy_app,
         "bpy.app.handlers": bpy_app_handlers,
         "bmesh": bmesh,
         "mathutils": mathutils,
+        "blf": blf,
+        "gpu": gpu,
+        "gpu_extras": gpu_extras,
+        "gpu_extras.batch": gpu_extras_batch,
+        "bpy_extras": bpy_extras,
+        "bpy_extras.io_utils": bpy_extras_io,
     })
 
     # Expose the repository as a package without running its Blender-only

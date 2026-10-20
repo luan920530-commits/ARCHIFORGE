@@ -1190,13 +1190,24 @@ class AF_FenceGenerator:
 #  UPDATE / REBUILD
 # ════════════════════════════════════════════════════════════
 def _find_fence_object(props):
-    name = props.object_name
+    """Object owning ``props`` (the fence group or one of its segments).
+
+    RNA wrappers are re-created on every access, so identity (``is``) never
+    matches: compare with ``==`` and also look inside ``segments`` so the
+    per-segment update callbacks find their fence.
+    """
+    name = getattr(props, "object_name", "")
     if name and name in bpy.data.objects:
         return bpy.data.objects[name]
     for obj in bpy.data.objects:
-        if (obj.type == 'MESH'
-                and hasattr(obj, AF_FENCE_PROP)
-                and getattr(obj, AF_FENCE_PROP) is props):
+        if obj.type != 'MESH':
+            continue
+        fence = getattr(obj, AF_FENCE_PROP, None)
+        if fence is None:
+            continue
+        if fence == props:
+            return obj
+        if any(seg == props for seg in getattr(fence, "segments", ())):
             return obj
     return None
 
@@ -1247,8 +1258,12 @@ def _rebuild_fence_mesh(obj, props):
     for poly in me.polygons:
         poly.use_smooth = True
 
-    if "material_index" in me.polygon_layers_int:
-        layer = me.polygon_layers_int["material_index"]
+    # Blender <= 3.6 exports the bmesh int layer as polygon_layers_int and
+    # its values must be copied; 4.0+ removed that API and a face layer
+    # named "material_index" already *is* the material index.
+    _layers = getattr(me, "polygon_layers_int", None)
+    if _layers is not None and "material_index" in _layers:
+        layer = _layers["material_index"]
         for poly in me.polygons:
             poly.material_index = layer.data[poly.index].value
 

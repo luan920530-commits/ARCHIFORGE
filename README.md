@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS_%E2%80%93_4.2%2B_extension-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.14.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.14.1-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -245,8 +245,15 @@ en medidas comerciales colombianas.
 - **Blender 3.3 LTS o posterior** (3.3 es la versión mínima declarada en
   `bl_info`). Como **extensión** (`blender_manifest.toml`) el mínimo es
   **Blender 4.2 LTS**, que es cuando aparece el sistema de extensiones.
-  La compatibilidad real debe verificarse en la versión de Blender de destino;
-  no se incluye Blender en las pruebas automatizadas del repositorio.
+- **Verificado en Blender 4.2.23 LTS** (modo *background*): la CI instala el
+  ZIP como extensión en un Blender 4.2 real y ejecuta los 125 operadores
+  (`tests/blender_smoke_42.py`). La interacción con ratón/vista 3D sigue
+  requiriendo prueba manual.
+- **macOS**: según el código de compilación de Blender, 3.3 LTS requiere
+  macOS 10.13 (Intel) / 11.0 (Apple Silicon), 3.6 requiere 10.15 y
+  **4.1–4.2+ requieren macOS 11.2 (Big Sur)**. Si su Mac está en Catalina o
+  anterior no podrá instalar 4.2 ni usar extensiones: use el ZIP clásico en
+  3.3 LTS (opciones A–C más abajo).
 - Sin dependencias externas: solo Blender + Python estándar
 - macOS / Windows / Linux
 
@@ -285,7 +292,7 @@ El repositorio incluye `blender_manifest.toml` (id `archiforge`,
 ```bash
 # desde la raíz del repositorio; genera archiforge-<versión>.zip
 blender --command extension build
-blender --command extension validate archiforge-1.14.0.zip
+blender --command extension validate archiforge-1.14.1.zip
 ```
 
 El paquete deja `blender_manifest.toml` en la raíz del ZIP y excluye
@@ -340,7 +347,7 @@ editor de shaders y el cambio aplica a todos los objetos que lo usan.
 ```
 ArchiForge/
 ├── blender_manifest.toml # Manifiesto de extensión Blender 4.2+ (extensions.blender.org)
-├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.14.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.14.1)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_i18n.py           # Idioma del addon: tablas para bpy.app.translations (v1.11)
 ├── af_icons.py          # Helper de iconos propios: icon_kw(), ITEM_ICONS, OBJECT_ICONS (v1.13)
@@ -383,6 +390,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.14.1** — Verificado en Blender 4.2.23 LTS real: corrige la generación de muros/pisos/vallas/cerchas en 4.x (`polygon_layers_int`), el registro de la biblioteca de ambientes, los sub-paneles Snap/Manipulador, Render Setup con EEVEE Next y los callbacks de segmentos; nuevo *smoke test* dentro de Blender, job de CI `blender-smoke` y reglas de API 4.x en la suite
 - **v1.14.0** — Extensión para Blender 4.2+: `blender_manifest.toml` validado con el CLI oficial, versión única `ADDON_VERSION`, resolución del paquete `bl_ext.*` en iconos e idioma y nombres de sockets del Principled BSDF 4.x
 - **v1.13.0** — Iconografía completa: 88 iconos nuevos (112 en total) para funciones y cada ítem de los catálogos, helper `af_icons.py` y menús/paneles/preferencias con iconos propios
 - **v1.12.0** — Materiales procedurales de nodos, sistema de unidades métrico/imperial efectivo, mensajes de estado traducidos, anotaciones (cotas, ejes, norte), conjuntos baño CO / apartamento demo y unificación de los módulos de escaleras
@@ -410,6 +418,8 @@ Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 | `bmesh operators expect a single BMesh…` | Actualice `af_slab.py` a v1.1+ (llamada posicional) |
 | El objeto no se regenera | Pulse **Regenerate / Force Update** en su panel de propiedades |
 | Falta un módulo en el Control Center | El diálogo lo omite solo; revise la consola (`Window → Toggle System Console`) para ver qué archivo falta |
+| En Blender 4.x no se crean muros/pisos (`polygon_layers_int`) o falla Render Setup (`BLENDER_EEVEE`) | Actualice a v1.14.1+ |
+| macOS: «No puedes usar esta versión de Blender con esta versión de macOS» | Blender 4.1+ exige macOS 11.2; en Catalina o anterior use Blender 3.3 LTS con el ZIP clásico |
 
 ¿Otro error? Abra un **Issue** pegando el traceback completo de la consola.
 
@@ -436,7 +446,27 @@ mínimos para ejecutar los generadores reales de ventanas y pisos y verificar
 sus coordenadas (hojas giradas con vidrio y divisiones, pernios sobre el eje,
 alturas de junta y losa base). La interacción modal, la construcción real de
 los árboles de nodos, los conjuntos combinados y el resto de la geometría
-deben validarse además dentro de Blender; CI no sustituye esa prueba.
+deben validarse además dentro de Blender.
+
+`tests/test_blender_api_rules.py` codifica lo aprendido al ejecutar el addon
+en Blender 4.2 real: el stub aplica las reglas de `EnumProperty`, los
+sub-paneles deben registrarse después de su `bl_parent_id` y no se admiten
+APIs eliminadas en 4.x (`polygon_layers_*`, `calc_normals`, `bgl`,
+`BLENDER_EEVEE` literal) sin su guarda.
+
+**Dentro de Blender 4.2+** (requiere el ZIP de extensión):
+
+```bash
+blender --command extension build --output-dir dist
+blender -b --python-exit-code 1 --python tests/blender_smoke_42.py -- \
+    --zip dist/archiforge-1.14.1.zip --report smoke_report.json
+```
+
+Instala el ZIP con el mismo operador que *Install from Disk*, verifica el
+registro como `bl_ext.user_default.archiforge`, ejecuta los 125 operadores y
+termina con desactivar/reactivar/desinstalar. El job de CI `blender-smoke`
+lo corre con el último Blender 4.2.x LTS oficial para Linux y publica el
+reporte JSON como artefacto.
 
 ## 🛣️ Roadmap
 

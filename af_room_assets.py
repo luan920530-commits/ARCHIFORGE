@@ -49,10 +49,6 @@ _DRAWER_DEFAULTS = {
 _SUSPEND = False
 
 
-def _room_items(self, context):
-    return ROOM_ENUM_ITEMS
-
-
 def _asset_items(self, context):
     return ASSET_ENUM_ITEMS.get(getattr(self, "room", "BEDROOM"), ())
 
@@ -162,16 +158,18 @@ class AF_RoomAssetProperties(PropertyGroup):
     object_name: StringProperty(default="", options={'HIDDEN'})
     af_version: IntProperty(default=AF_ROOM_ASSET_VERSION, options={'HIDDEN'})
 
+    # Blender (3.3 and 4.2 alike) rejects a string ``default`` when ``items``
+    # is a callback: the room list is static, so pass the tuple directly and
+    # let the dynamic asset list fall back to its first entry.
     room: EnumProperty(
         name="Room",
-        items=_room_items,
+        items=ROOM_ENUM_ITEMS,
         default="BEDROOM",
         update=_room_property_update,
     )
     asset_type: EnumProperty(
         name="Asset",
         items=_asset_items,
-        default="BED_NIGHTSTAND_DRAWERS",
         update=_asset_property_update,
     )
     width: FloatProperty(
@@ -1418,13 +1416,13 @@ class ARCHIFORGE_OT_room_asset(Operator):
     bl_description = "Choose from 100 furniture and decor assets by room"
     bl_options = {'REGISTER', 'UNDO'}
 
+    # Same rule as AF_RoomAssetProperties: no string default on callback enums.
     room: EnumProperty(
-        name="Room", items=_room_items, default="BEDROOM",
+        name="Room", items=ROOM_ENUM_ITEMS, default="BEDROOM",
         update=_operator_room_update,
     )
     asset_type: EnumProperty(
         name="Object / Set", items=_asset_items,
-        default="BED_NIGHTSTAND_DRAWERS",
         update=_operator_asset_update,
     )
     auto_dimensions: BoolProperty(

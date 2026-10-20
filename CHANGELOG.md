@@ -5,6 +5,75 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.14.1] — 2026-10-20 — Verificado en Blender 4.2 LTS real
+
+Primera versión ejecutada dentro de un **Blender 4.2.23 LTS real** (módulo
+`bpy` oficial, modo *background*): instalación con el operador de
+*Install from Disk*, registro completo, los 125 operadores y el ciclo
+desactivar/reactivar. Todo lo que sigue se detectó en esa ejecución y ya
+está corregido.
+
+### Corregido
+- **Muros, pisos, vallas y cerchas no se generaban en Blender 4.x**
+  (`AttributeError: 'Mesh' object has no attribute 'polygon_layers_int'`):
+  Blender 4.0 eliminó `Mesh.polygon_layers_*`. La capa `int` de bmesh llamada
+  `material_index` ya es el índice de material de la cara en 4.x, así que la
+  copia manual solo se hace cuando `polygon_layers_int` existe (≤ 3.6).
+- **Biblioteca de ambientes (`af_room_assets`) nunca se registraba**:
+  `EnumProperty(items=<función>, default="BEDROOM")` es rechazado por Blender
+  (`'default' can only be an integer when 'items' is a function`, también en
+  3.3). `room` usa ahora la tupla estática del catálogo y `asset_type`
+  toma por defecto el primer activo del ambiente.
+- **Sub-paneles «Snap» y «Manipulador» invisibles**: `af_snap` y
+  `af_manipulator` se registraban antes que `af_panel`, dueño de sus
+  `bl_parent_id`, y Blender rechazaba los hijos (*parent … not found*).
+  Ahora se registran después de `af_panel`.
+- **Render Setup fallaba en 4.2** (`enum "BLENDER_EEVEE" not found`): EEVEE
+  se llama `BLENDER_EEVEE_NEXT` en 4.2–4.x. `af_rendering._set_render_engine`
+  resuelve el identificador disponible y `use_ssr`/`use_bloom` solo se tocan
+  si existen.
+- Los callbacks de actualización de **segmentos** de muro y valla lanzaban
+  `AttributeError: … has no attribute 'object_name'` (la búsqueda del objeto
+  usaba identidad `is` entre wrappers RNA, que nunca coincide). Ahora
+  comparan con `==` y buscan también dentro de `segments`.
+- `blender_manifest.toml`: `version` vuelve a coincidir con `bl_info` y
+  `blender_version_min` queda en `4.2.0`, el mínimo que exige la plataforma de
+  extensiones (el manual: *use at least 4.2.0*); Blender ≤ 4.1 ignora el
+  manifiesto y sigue instalando el addon por `bl_info` (3.3 LTS). Se conserva
+  la línea de copyright con el nombre del autor.
+
+### Agregado
+- `tests/blender_smoke_42.py`: *smoke test* para ejecutar **dentro** de
+  Blender 4.2+ (`blender -b --python-exit-code 1 --python
+  tests/blender_smoke_42.py -- --zip dist/archiforge-<versión>.zip`).
+  Instala el ZIP con `extensions.package_install_files`, comprueba
+  `bl_ext.<repo>.archiforge`, paneles, 125 operadores, preferencias, 112
+  iconos, idioma, ejecuta cada operador con un objeto adecuado y termina con
+  desactivar/reactivar + desinstalar. Resultado en 4.2.23: 145 OK, 0 fallos,
+  25 omitidos (herramientas interactivas que requieren vista 3D).
+- Job de CI **`blender-smoke`**: descarga el último Blender 4.2.x LTS oficial
+  para Linux, valida el ZIP con `blender --command extension validate` y
+  ejecuta el *smoke test* anterior; el reporte JSON se publica como artefacto.
+- `tests/test_blender_api_rules.py` (9 pruebas): el stub `bpy` ahora aplica
+  las reglas reales de `EnumProperty`; se verifica estáticamente el orden
+  padre→hijo de los paneles, que no se usen APIs eliminadas en 4.x
+  (`polygon_layers_*`, `calc_normals`, `bgl`, `BLENDER_EEVEE` literal,
+  shaders `3D_*`) y que `use_auto_smooth` y los shaders `2D_*` estén
+  protegidos. Todos los `af_*.py` se importan bajo el stub (164 pruebas).
+
+### Notas
+- Requisitos de macOS según el propio código de compilación de Blender:
+  3.3 LTS → macOS 10.13 (Intel) / 11.0 (Apple Silicon); 3.6 → 10.15;
+  **4.1 y 4.2 → macOS 11.2 (Big Sur)**. En un Mac con Catalina o anterior no
+  existe forma oficial de usar el sistema de extensiones: instale el ZIP
+  clásico (opciones A–C del README) en 3.3 LTS.
+- El módulo `bpy` de PyPI hace *segfault* al cerrar el intérprete si en la
+  sesión se registró cualquier `PropertyGroup` con callbacks Python (afecta a
+  todos los addons, no a ArchiForge); el *smoke test* sale con `os._exit`
+  solo en ese modo. El binario oficial cierra normalmente.
+
+---
+
 ## [1.14.0] — 2026-10-20 — Extensión para Blender 4.2+ (blender_manifest.toml)
 
 ### Agregado

@@ -230,6 +230,32 @@ def _setup_camera_auto(context, angle_preset: str):
     return cam_obj
 
 
+# EEVEE is 'BLENDER_EEVEE' up to 4.1, 'BLENDER_EEVEE_NEXT' in 4.2-4.x and
+# 'BLENDER_EEVEE' again from 5.0; the stored identifier stays 'BLENDER_EEVEE'
+# and is resolved against the running Blender when applied.
+_EEVEE_CANDIDATES = ('BLENDER_EEVEE', 'BLENDER_EEVEE_NEXT')
+
+
+def _set_render_engine(render, engine):
+    """Assign ``engine`` to ``render.engine`` using the id this Blender knows."""
+    candidates = [engine]
+    if engine in _EEVEE_CANDIDATES:
+        try:
+            known = {item.identifier for item in
+                     render.bl_rna.properties["engine"].enum_items}
+        except Exception:  # noqa: BLE001 - probing only
+            known = set()
+        candidates = sorted(_EEVEE_CANDIDATES,
+                            key=lambda c: (c not in known, c != engine))
+    for candidate in candidates:
+        try:
+            render.engine = candidate
+            return candidate
+        except TypeError:
+            continue
+    return render.engine
+
+
 def _apply_render_settings(context, rs: AF_RenderSettings):
     """Aplica la configuración de render de AF a la escena."""
     scene   = context.scene
@@ -237,7 +263,7 @@ def _apply_render_settings(context, rs: AF_RenderSettings):
     cycles  = scene.cycles if hasattr(scene, 'cycles') else None
     eevee   = scene.eevee  if hasattr(scene, 'eevee')  else None
 
-    render.engine      = rs.engine
+    _set_render_engine(render, rs.engine)
     render.resolution_x          = rs.res_x
     render.resolution_y          = rs.res_y
     render.resolution_percentage = rs.res_pct
@@ -257,8 +283,11 @@ def _apply_render_settings(context, rs: AF_RenderSettings):
             cycles.use_denoising  = rs.use_denoiser
         if eevee:
             eevee.taa_render_samples = 64
-            eevee.use_ssr         = True
-            eevee.use_bloom       = False
+            # Legacy EEVEE only; EEVEE Next (4.2+) dropped these toggles.
+            if hasattr(eevee, "use_ssr"):
+                eevee.use_ssr = True
+            if hasattr(eevee, "use_bloom"):
+                eevee.use_bloom = False
 
     elif rs.preset == 'CLAY':
         render.engine = 'BLENDER_WORKBENCH'
