@@ -32,6 +32,15 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 
 AF_FURN_PROP = "archiforge_furniture"
 AF_FURN_VERSION = 1
@@ -980,7 +989,8 @@ class ARCHIFORGE_OT_furniture(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Furniture Item", icon='MESH_CUBE')
+        col.label(text="New Furniture Item",
+                  **_icon(_item_icon(self.item_type, "furniture"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -1069,7 +1079,7 @@ class ARCHIFORGE_PT_furniture(Panel):
                 and obj.archiforge_furniture.is_af_furniture)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("furniture", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_furniture
@@ -1080,7 +1090,8 @@ class ARCHIFORGE_PT_furniture(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "furniture"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -1104,7 +1115,8 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t in ('DINING_CHAIR', 'OFFICE_CHAIR'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Chair", icon='MESH_CUBE')
+            col.label(text="Chair",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "seat_height")
             if t == 'DINING_CHAIR':
                 col.prop(props, "seat_style", text="")
@@ -1117,7 +1129,8 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t in ('ARMCHAIR', 'SOFA'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Seating", icon='MESH_CUBE')
+            col.label(text="Seating",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "recline")
             col.prop(props, "accent_pillow")
             if t == 'ARMCHAIR':
@@ -1130,7 +1143,8 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t == 'COFFEE_TABLE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Table", icon='MESH_CUBE')
+            col.label(text="Table",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "top_shape", text="")
             col.prop(props, "glass_top")
             col.prop(props, "lower_shelf")
@@ -1138,13 +1152,15 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t == 'DINING_TABLE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Table", icon='MESH_CUBE')
+            col.label(text="Table",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "pedestal")
 
         if t == 'BED':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Bed (CO sizes)", icon='MESH_CUBE')
+            col.label(text="Bed (CO sizes)",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "bed_size", text="")
             col.prop(props, "headboard", text="")
             col.prop(props, "pillows")
@@ -1154,7 +1170,8 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t in ('NIGHTSTAND', 'DRESSER'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Storage", icon='MESH_CUBE')
+            col.label(text="Storage",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             if t == 'NIGHTSTAND':
                 col.prop(props, "drawers")
             col.prop(props, "legs")
@@ -1162,7 +1179,8 @@ class ARCHIFORGE_PT_furniture(Panel):
         if t == 'SHELF':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Shelf", icon='MESH_CUBE')
+            col.label(text="Shelf",
+                      **_icon(_item_icon(t, "furniture"), 'MESH_CUBE'))
             col.prop(props, "shelf_bays")
             col.prop(props, "shelf_back")
             col.prop(props, "lower_cabinet")

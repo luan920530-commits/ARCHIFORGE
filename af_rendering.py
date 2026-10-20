@@ -28,6 +28,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -371,7 +377,7 @@ class ARCHIFORGE_PT_rendering(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='RENDER_STILL')
+        self.layout.label(text="", **_icon("render", 'RENDER_STILL'))
 
     def draw(self, context):
         rs     = getattr(context.scene, "af_render", None)
@@ -386,7 +392,7 @@ class ARCHIFORGE_PT_rendering(Panel):
         # ── Preset + Engine ───────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Render Mode", icon='RENDER_STILL')
+        col.label(text="Render Mode", **_icon("render", 'RENDER_STILL'))
         col.prop(rs, "preset")
         col.prop(rs, "engine")
 

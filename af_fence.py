@@ -59,6 +59,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1306,7 +1312,7 @@ class ARCHIFORGE_OT_fence(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Fence", icon='MESH_PLANE')
+        col.label(text="New Fence", **_icon("fence", 'MESH_PLANE'))
         col.prop(self, "fence_type")
         col.separator()
         col.prop(self, "height")
@@ -1488,7 +1494,7 @@ class ARCHIFORGE_PT_fence(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("fence", 'MESH_PLANE'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_fence

@@ -5,6 +5,60 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.13.0] — 2026-10-20 — Iconografía completa
+
+### Agregado
+- **88 iconos PNG nuevos** (112 en total) dibujados con el mismo estilo
+  procedural de `icons/generate_icons.py` (azul noche, turquesa, dorado;
+  128 × 128 RGBA, sin fuentes ni dependencias en tiempo de ejecución):
+  - *Funciones*: `annotation`, `dimension`, `dimension_draw`, `grid_axes`,
+    `north_arrow`, `sets`, `set_bathroom`, `set_apartment`, `units`,
+    `language`, `procedural`, `preferences`, `material_library`, `scene`,
+    `tools`, `quick_edit`, `manipulator`, `reference_point`, `render`,
+    `preset`, `room_assets`, `place`, `draw`, `curve`, `ceiling`.
+  - *Catálogos* (un icono por `item_type`): baño (10), eléctrico (9),
+    muebles (10), cocina (7), decoración (9), puertas y ventanas (6),
+    escaleras (`stair_l`, `stair_spiral`, `ramp`), Estructura+ (6) y
+    cubiertas (`roof_gable`, `roof_hip`, `roof_shed`).
+- **`af_icons.py`**: helper compartido sin `bpy` — `icon_kw(name,
+  fallback)`, `icon_id()`, `get_icons()`, `item_icon()` y los mapas
+  `ITEM_ICONS` (item_type → icono) y `OBJECT_ICONS` (grupo de propiedades →
+  icono). Si falta el PNG, falla la vista previa o el addon corre fuera de
+  Blender, devuelve el icono nativo (`{'icon': ...}`), nunca
+  `icon_value=0`.
+- Pruebas: `tests/test_icon_assets.py` exige que los PNG coincidan
+  exactamente con `generate_icons.ICONS`, que todo icono referenciado por
+  cualquier módulo exista, que `ITEM_ICONS` cubra todos los `item_type` de
+  los ocho catálogos y que `OBJECT_ICONS` apunte a recursos reales;
+  `tests/test_icon_helper.py` cubre el helper y el patrón de importación
+  con respaldo (144 pruebas).
+
+### Cambiado
+- **Panel principal, Shift+A y Control Center**: cada botón de catálogo usa
+  el icono de su ítem (inodoro, sofá, nevera, columna, puerta corrediza…) y
+  los botones Draw / Place / From Curve / Ceiling / Room Assets, las
+  anotaciones y los conjuntos usan los suyos. El submenú Shift+A suma
+  *Dimension Selected*, *Grid Axes*, *North Arrow*, *Complete Bathroom (CO)*
+  y *Demo Apartment*.
+- **Menús `af_menu.py`** (Shift+A, contextual, pie) y **paneles de todos los
+  módulos**: cabeceras con el icono del módulo (incluidas las nuevas de
+  Techo, Room Assets y Manipuladores), etiqueta *Type* y secciones por tipo
+  con el icono del ítem activo, *Boolean*, *Wall Opening*, *Build All*, etc.
+  `af_panel.py` muestra el icono propio del tipo AF en Object Info y en los
+  listados de escena.
+- **Preferencias**: pestañas Interface/Units/Manipulators, idioma, sistema
+  de unidades, biblioteca de materiales y tamaños con iconos propios. Las
+  casillas booleanas se mantienen sin icono (Blender las convertiría en
+  botones de conmutación).
+- `icons/generate_icons.py` acepta nombres de iconos como argumentos para
+  regenerar solo algunos; los 24 originales se reproducen byte a byte.
+
+### Notas
+- Los iconos se verificaron en hojas de contacto renderizadas; la carga en
+  Blender usa el mismo `bpy.utils.previews` que la versión anterior.
+
+---
+
 ## [1.12.0] — 2026-10-20 — Materiales procedurales, unidades, anotaciones y conjuntos
 
 ### Agregado

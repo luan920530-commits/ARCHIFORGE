@@ -40,6 +40,15 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 AF_STAIR_PROP = "archiforge_stair"
 # Nombre de la propiedad del módulo duplicado eliminado en 1.12; los
 # archivos antiguos la conservan como ID property hasta migrarla.
@@ -558,7 +567,8 @@ class _StairCreateMixin:
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Stair / Ramp", icon='MESH_CUBE')
+        col.label(text="New Stair / Ramp",
+                  **_icon(_item_icon(self.item_type, "stair"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "total_rise")
@@ -695,7 +705,7 @@ class ARCHIFORGE_PT_stair(Panel):
                 and obj.archiforge_stair.is_af_stair)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("stair", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_stair
@@ -706,7 +716,8 @@ class ARCHIFORGE_PT_stair(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "stair"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 

@@ -39,6 +39,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -345,7 +351,7 @@ class ARCHIFORGE_PT_reference_point(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon=AF_RP_ICON)
+        self.layout.label(text="", **_icon("reference_point", AF_RP_ICON))
 
     def draw(self, context):
         layout   = self.layout

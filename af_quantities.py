@@ -24,6 +24,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 def preferred_unit_system():
     """Unit system chosen in the ArchiForge preferences (metric default)."""
@@ -79,13 +85,13 @@ class ARCHIFORGE_PT_quantities(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SPREADSHEET')
+        self.layout.label(text="", **_icon("quantities", 'SPREADSHEET'))
 
     def draw(self, context):
         layout = self.layout
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Bill of Quantities", icon='SPREADSHEET')
+        col.label(text="Bill of Quantities", **_icon("quantities", 'SPREADSHEET'))
         try:
             rows = collect_quantities(context.scene.objects)
         except (TypeError, ValueError, ReferenceError) as exc:

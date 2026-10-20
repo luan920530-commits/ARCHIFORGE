@@ -25,6 +25,15 @@
 # ════════════════════════════════════════════════════════════
 
 import bpy
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
 import bmesh
 import math
 
@@ -1474,13 +1483,17 @@ class ARCHIFORGE_PT_roof(Panel):
                 and getattr(obj, "af_roof", None) is not None
                 and obj.af_roof.is_af_roof)
 
+    def draw_header(self, context):
+        self.layout.label(text="", **_icon("roof", 'MOD_BUILD'))
+
     def draw(self, context):
         layout = self.layout
         obj = context.active_object
         p = obj.af_roof
 
         box = layout.box()
-        box.label(text="Roof Type", icon='HOME')
+        box.label(text="Roof Type",
+                  **_icon(_item_icon(p.roof_type, "roof"), 'HOME'))
         box.prop(p, "roof_type", text="")
         row = box.row(align=True)
         row.operator("archiforge.roof_edit", text="Regenerate",

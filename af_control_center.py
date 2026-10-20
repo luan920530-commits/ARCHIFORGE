@@ -83,6 +83,15 @@ def _icon_kw(icons, name, fallback='MESH_CUBE'):
     return {'icon': fallback}
 
 
+def _item_icon(item_type, default):
+    """Ícono propio de un item_type (af_icons.ITEM_ICONS) o el del módulo."""
+    try:
+        from .af_icons import item_icon
+    except ImportError:
+        return default
+    return item_icon(item_type, default)
+
+
 # ════════════════════════════════════════════════════════════
 #  OPERADOR — Diálogo flotante
 # ════════════════════════════════════════════════════════════
@@ -185,7 +194,7 @@ class ARCHIFORGE_OT_control_center(Operator):
                          **_icon_kw(icons, "wall_draw", 'GREASEPENCIL'))
         if _op_exists("archiforge.wall_from_curve"):
             row.operator("archiforge.wall_from_curve", text="",
-                         icon='CURVE_DATA')
+                         **_icon_kw(icons, "curve", 'CURVE_DATA'))
 
         # — Losas —
         box = layout.box()
@@ -198,7 +207,7 @@ class ARCHIFORGE_OT_control_center(Operator):
         if _op_exists("archiforge.slab_draw"):
             row.operator(
                 "archiforge.slab_draw", text="Draw",
-                **_icon_kw(icons, "slab", 'GREASEPENCIL'))
+                **_icon_kw(icons, "draw", 'GREASEPENCIL'))
         if _op_exists("archiforge.slab_from_wall"):
             row.operator(
                 "archiforge.slab_from_wall", text="Floor",
@@ -206,7 +215,7 @@ class ARCHIFORGE_OT_control_center(Operator):
             ).ceiling = False
             row.operator(
                 "archiforge.slab_from_wall", text="Ceiling",
-                **_icon_kw(icons, "slab", 'MESH_CUBE')
+                **_icon_kw(icons, "ceiling", 'MESH_CUBE')
             ).ceiling = True
 
         # — Techos —
@@ -225,10 +234,11 @@ class ARCHIFORGE_OT_control_center(Operator):
                 if tid in av['roof']:
                     row.operator(
                         "archiforge.roof_add", text=txt,
-                        icon='ADD').roof_type = tid
+                        **_icon_kw(icons, _item_icon(tid, "roof"), 'ADD')
+                    ).roof_type = tid
         if _op_exists("archiforge.roof_place"):
             row.operator("archiforge.roof_place", text="Place",
-                         icon='CURSOR')
+                         **_icon_kw(icons, "place", 'CURSOR'))
 
         # — Estructura+ (columnas, vigas,…) —
         if _op_exists("archiforge.structure"):
@@ -243,7 +253,8 @@ class ARCHIFORGE_OT_control_center(Operator):
                     if tid in av['struct']:
                         row.operator(
                             "archiforge.structure", text=txt,
-                            **_icon_kw(icons, "structure", 'MESH_CUBE')).item_type = tid
+                            **_icon_kw(icons, _item_icon(tid, "structure"),
+                                       'MESH_CUBE')).item_type = tid
 
         # — Extras estructura —
         box = layout.box()
@@ -260,7 +271,7 @@ class ARCHIFORGE_OT_control_center(Operator):
             ).preset_operator = "archiforge.fence"
         if _op_exists("archiforge.fence_from_curve"):
             row.operator("archiforge.fence_from_curve", text="",
-                         icon='CURVE_DATA')
+                         **_icon_kw(icons, "curve", 'CURVE_DATA'))
         row = box.row(align=True)
         if _op_exists("archiforge.floor_preset_menu"):
             row.operator(
@@ -270,12 +281,12 @@ class ARCHIFORGE_OT_control_center(Operator):
             ).preset_operator = "archiforge.floor"
             row.operator(
                 "archiforge.floor_preset_menu", text="",
-                icon='CURVE_DATA'
+                **_icon_kw(icons, "curve", 'CURVE_DATA')
             ).preset_operator = "archiforge.floor_from_curve"
         if _op_exists("archiforge.floor_draw"):
             row.operator(
                 "archiforge.floor_draw", text="Draw",
-                **_icon_kw(icons, "floor", 'GREASEPENCIL'))
+                **_icon_kw(icons, "draw", 'GREASEPENCIL'))
 
     # ═══════════════════════════════════════════════════════
     #  TAB: ABERTURAS + CIRCULACIÓN
@@ -292,11 +303,11 @@ class ARCHIFORGE_OT_control_center(Operator):
             ).preset_operator = "archiforge.door"
             row.operator(
                 "archiforge.door_preset_menu", text="Draw",
-                icon='GREASEPENCIL'
+                **_icon_kw(icons, "draw", 'GREASEPENCIL')
             ).preset_operator = "archiforge.door_draw"
         if _op_exists("archiforge.door_place"):
             row.operator("archiforge.door_place", text="Place",
-                         icon='CURSOR')
+                         **_icon_kw(icons, "place", 'CURSOR'))
 
         # — Ventanas —
         box = layout.box()
@@ -309,11 +320,11 @@ class ARCHIFORGE_OT_control_center(Operator):
             ).preset_operator = "archiforge.window"
             row.operator(
                 "archiforge.window_preset_menu", text="Draw",
-                icon='GREASEPENCIL'
+                **_icon_kw(icons, "draw", 'GREASEPENCIL')
             ).preset_operator = "archiforge.window_draw"
         if _op_exists("archiforge.window_place"):
             row.operator("archiforge.window_place", text="Place",
-                         icon='CURSOR')
+                         **_icon_kw(icons, "place", 'CURSOR'))
 
         # — Puertas/ventanas paramétricas (nuevas) —
         if _op_exists("archiforge.opening"):
@@ -331,7 +342,8 @@ class ARCHIFORGE_OT_control_center(Operator):
                     if tid in av['open']:
                         row.operator(
                             "archiforge.opening", text=txt,
-                            **_icon_kw(icons, "opening", 'MESH_CUBE')).item_type = tid
+                            **_icon_kw(icons, _item_icon(tid, "opening"),
+                                       'MESH_CUBE')).item_type = tid
 
         # — Escaleras —
         box = layout.box()
@@ -350,7 +362,8 @@ class ARCHIFORGE_OT_control_center(Operator):
                 if tid in av['stair']:
                     row.operator(
                         "archiforge.stair", text=txt,
-                        **_icon_kw(icons, "stair", 'ADD')).item_type = tid
+                        **_icon_kw(icons, _item_icon(tid, "stair"), 'ADD')
+                    ).item_type = tid
 
     # ═══════════════════════════════════════════════════════
     #  TAB: INTERIORES
@@ -361,14 +374,16 @@ class ARCHIFORGE_OT_control_center(Operator):
         shown = [(t, x) for t, x in items if t in avail]
         if custom:
             shown.append((None, "Custom…"))
-        icon_kwargs = (
-            _icon_kw(icons or {}, icon_name, icon)
-            if icon_name else {'icon': icon}
-        )
         for i in range(0, len(shown), per_row):
             row = box.row(align=True)
             for tid, txt in shown[i:i + per_row]:
-                kwargs = {'icon': 'ADD'} if tid is None else icon_kwargs
+                if tid is None:
+                    kwargs = {'icon': 'ADD'}
+                elif icon_name:
+                    kwargs = _icon_kw(icons or {}, _item_icon(tid, icon_name),
+                                      icon)
+                else:
+                    kwargs = {'icon': icon}
                 op_call = row.operator(op, text=txt, **kwargs)
                 if tid is not None:
                     op_call.item_type = tid
@@ -428,9 +443,10 @@ class ARCHIFORGE_OT_control_center(Operator):
 
         if _op_exists("archiforge.room_asset"):
             box = layout.box()
-            box.label(text="Room Asset Library", icon='ASSET_MANAGER')
+            box.label(text="Room Asset Library",
+                      **_icon_kw(icons, "room_assets", 'ASSET_MANAGER'))
             box.operator("archiforge.room_asset", text="Browse 100 objects / sets",
-                         icon='MESH_CUBE')
+                         **_icon_kw(icons, "room_assets", 'MESH_CUBE'))
 
     # ═══════════════════════════════════════════════════════
     #  TAB: ELÉCTRICO + HERRAMIENTAS
@@ -453,7 +469,7 @@ class ARCHIFORGE_OT_control_center(Operator):
                 row = box.row(align=True)
                 row.operator("archiforge.electrical_light",
                              text="Real Blender Light",
-                             icon='LIGHT')
+                             **_icon_kw(icons, "bulb", 'LIGHT'))
 
         box = layout.box()
         box.label(text="Quantities", **_icon_kw(icons, "quantities", 'SPREADSHEET'))
@@ -464,7 +480,7 @@ class ARCHIFORGE_OT_control_center(Operator):
                          **_icon_kw(icons, "quantities", 'EXPORT'))
 
         box = layout.box()
-        box.label(text="Tools", **_icon_kw(icons, "control_center", 'TOOL_SETTINGS'))
+        box.label(text="Tools", **_icon_kw(icons, "tools", 'TOOL_SETTINGS'))
         row = box.row(align=True)
         if _op_exists("archiforge.auto_boolean"):
             row.operator(

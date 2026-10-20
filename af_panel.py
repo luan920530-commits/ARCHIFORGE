@@ -50,6 +50,19 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon, OBJECT_ICONS as _OBJECT_ICONS
+except ImportError:  # pragma: no cover - fuera del paquete
+    _OBJECT_ICONS = {}
+
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+
+def _type_icon(attr, fallback):
+    """Ícono propio del tipo AF (``archiforge_wall`` → wall.png) o el nativo."""
+    return _icon(_OBJECT_ICONS.get(attr), fallback)
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES — propiedades de cada tipo de objeto AF
@@ -561,7 +574,7 @@ class ARCHIFORGE_PT_object_info(Panel):
     def draw_header(self, context):
         info = _detect_af_type(context.active_object)
         if info:
-            self.layout.label(text="", icon=info[2])
+            self.layout.label(text="", **_type_icon(info[0], info[2]))
 
     def draw(self, context):
         obj    = context.active_object
@@ -580,7 +593,7 @@ class ARCHIFORGE_PT_object_info(Panel):
         box = layout.box()
         col = box.column(align=True)
         row = col.row(align=True)
-        row.label(text=f"{label}", icon=icon)
+        row.label(text=f"{label}", **_type_icon(attr, icon))
         row.label(text=obj.name, icon='OBJECT_DATA')
 
         # ── Dimensiones del bounding box ─────────────────────
@@ -660,7 +673,7 @@ class ARCHIFORGE_PT_scene(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SCENE_DATA')
+        self.layout.label(text="", **_icon("scene", 'SCENE_DATA'))
 
     def draw(self, context):
         layout = self.layout
@@ -686,7 +699,7 @@ class ARCHIFORGE_PT_scene(Panel):
             if n == 0:
                 continue
             row = col.row(align=True)
-            row.label(text=f"  {label}:", icon=icon)
+            row.label(text=f"  {label}:", **_type_icon(attr, icon))
             row.label(text=str(n))
             sub = row.row(align=True)
             sub.scale_x = 0.7
@@ -706,7 +719,7 @@ class ARCHIFORGE_PT_scene(Panel):
         layout.separator(factor=0.3)
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Actions", icon='TOOL_SETTINGS')
+        col.label(text="Actions", **_icon("tools", 'TOOL_SETTINGS'))
 
         row = col.row(align=True)
         row.operator(
@@ -738,7 +751,7 @@ class ARCHIFORGE_PT_scene(Panel):
                 row = col.row(align=True)
                 icon_sel = 'RESTRICT_SELECT_OFF' \
                     if obj.select_get() else 'RESTRICT_SELECT_ON'
-                row.label(text=obj.name, icon=icon)
+                row.label(text=obj.name, **_type_icon(attr, icon))
                 row.label(text=label)
                 sub = row.row(align=True)
                 sub.scale_x = 0.6
@@ -771,7 +784,7 @@ class ARCHIFORGE_PT_tools(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='TOOL_SETTINGS')
+        self.layout.label(text="", **_icon("tools", 'TOOL_SETTINGS'))
 
     def draw(self, context):
         layout = self.layout
@@ -781,12 +794,12 @@ class ARCHIFORGE_PT_tools(Panel):
         # ── Boolean ───────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Boolean", icon='MOD_BOOLEAN')
+        col.label(text="Boolean", **_icon("boolean", 'MOD_BOOLEAN'))
         row = col.row(align=True)
         op = row.operator(
             "archiforge.auto_boolean",
             text="Auto Boolean",
-            icon='MOD_BOOLEAN'
+            **_icon("boolean", 'MOD_BOOLEAN')
         )
         op.mode = 'HYBRID'
         row2 = col.row(align=True)
@@ -800,69 +813,69 @@ class ARCHIFORGE_PT_tools(Panel):
         # ── Wall Tools ────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Wall Tools", icon='SNAP_EDGE')
+        col.label(text="Wall Tools", **_icon("wall", 'SNAP_EDGE'))
         row = col.row(align=True)
         row.operator(
             "archiforge.wall_draw",
             text="Draw Wall",
-            icon='GREASEPENCIL'
+            **_icon("wall_draw", 'GREASEPENCIL')
         )
         row.operator(
             "archiforge.wall_from_curve",
             text="From Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
         col.operator(
             "archiforge.wall_from_slab",
             text="Wall from Slab",
-            icon='MESH_PLANE'
+            **_icon("slab", 'MESH_PLANE')
         )
 
         # ── Slab Tools ────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Slab Tools", icon='MESH_PLANE')
+        col.label(text="Slab Tools", **_icon("slab", 'MESH_PLANE'))
         row = col.row(align=True)
         row.operator(
             "archiforge.slab_from_wall",
             text="Floor",
-            icon='MESH_PLANE'
+            **_icon("slab", 'MESH_PLANE')
         ).ceiling = False
         row.operator(
             "archiforge.slab_from_wall",
             text="Ceiling",
-            icon='MESH_PLANE'
+            **_icon("ceiling", 'MESH_PLANE')
         ).ceiling = True
         col.operator(
             "archiforge.slab_from_curve",
             text="Slab from Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
 
         # ── Fence Tools ───────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Fence Tools", icon='MESH_PLANE')
+        col.label(text="Fence Tools", **_icon("fence", 'MESH_PLANE'))
         col.operator(
             "archiforge.fence_from_curve",
             text="Fence from Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
 
         # ── Floor Tools ───────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Floor Tools", icon='MESH_GRID')
+        col.label(text="Floor Tools", **_icon("floor", 'MESH_GRID'))
         row = col.row(align=True)
         row.operator(
             "archiforge.floor_from_curve",
             text="From Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
         row.operator(
             "archiforge.floor_from_wall",
             text="From Wall",
-            icon='SNAP_FACE'
+            **_icon("wall", 'SNAP_FACE')
         )
 
 
@@ -884,7 +897,7 @@ class ARCHIFORGE_PT_quick_edit(Panel):
         return _detect_af_type(context.active_object) is not None
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='PREFERENCES')
+        self.layout.label(text="", **_icon("quick_edit", 'PREFERENCES'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -969,7 +982,7 @@ class ARCHIFORGE_PT_snap_tools(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SNAP_ON')
+        self.layout.label(text="", **_icon("snap", 'SNAP_ON'))
 
     def draw(self, context):
         layout = self.layout

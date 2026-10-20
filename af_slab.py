@@ -59,6 +59,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1333,7 +1339,7 @@ class ARCHIFORGE_PT_slab(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("slab", 'MESH_PLANE'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_slab

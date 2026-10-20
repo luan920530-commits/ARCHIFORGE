@@ -48,6 +48,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -906,7 +912,7 @@ class ARCHIFORGE_OT_window(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Window", icon='MESH_PLANE')
+        col.label(text="New Window", **_icon("window", 'MESH_PLANE'))
         col.prop(self, "window_type")
         col.separator()
         col.prop(self, "width")
@@ -1172,7 +1178,7 @@ class ARCHIFORGE_PT_window(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("window", 'MESH_PLANE'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -1320,10 +1326,10 @@ class ARCHIFORGE_PT_window(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Boolean", icon='MOD_BOOLEAN')
+        col.label(text="Boolean", **_icon("boolean", 'MOD_BOOLEAN'))
         col.prop(props, "auto_boolean")
         col.operator("archiforge.window_apply_boolean",
-                     text="Apply Boolean Now", icon='MOD_BOOLEAN')
+                     text="Apply Boolean Now", **_icon("boolean", 'MOD_BOOLEAN'))
 
         layout.separator()
         layout.operator("archiforge.window_place",

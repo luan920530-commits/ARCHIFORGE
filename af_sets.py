@@ -46,6 +46,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
         return text
 
 try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+try:
     from . import af_autoboolean
 except ImportError:  # pragma: no cover
     af_autoboolean = None
@@ -626,16 +632,16 @@ class ARCHIFORGE_PT_sets(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='HOME')
+        self.layout.label(text="", **_icon("sets", 'HOME'))
 
     def draw(self, context):
         layout = self.layout
         col = layout.column(align=True)
         col.label(text="Built at the 3D cursor", icon='PIVOT_CURSOR')
         col.operator("archiforge.set_bathroom", text="Complete Bathroom (CO)",
-                     icon='SPHERE')
+                     **_icon("set_bathroom", 'SPHERE'))
         col.operator("archiforge.set_apartment", text="Demo Apartment",
-                     icon='HOME')
+                     **_icon("set_apartment", 'HOME'))
         col.separator()
         col.label(text="Reference layouts, edit freely", icon='INFO')
 

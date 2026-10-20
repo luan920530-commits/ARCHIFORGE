@@ -36,6 +36,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
         return text
 
 try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+try:
     from . import af_material_procedural as _procedural
 except ImportError:  # pragma: no cover - fuera del paquete
     _procedural = None
@@ -750,7 +756,7 @@ class ARCHIFORGE_PT_materials(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MATERIAL')
+        self.layout.label(text="", **_icon("material", 'MATERIAL'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -852,7 +858,7 @@ class ARCHIFORGE_PT_materials(Panel):
         row.operator(
             "archiforge.create_all_materials",
             text="Build All",
-            icon='MATERIAL',
+            **_icon("material_library", 'MATERIAL'),
         )
         row.operator(
             "archiforge.reset_materials",

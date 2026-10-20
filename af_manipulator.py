@@ -41,6 +41,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 # Importar snap para integración
 try:
     from . import af_snap
@@ -487,6 +493,9 @@ class ARCHIFORGE_PT_manipulator(Panel):
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT'
+
+    def draw_header(self, context):
+        self.layout.label(text="", **_icon("manipulator", 'ORIENTATION_GIMBAL'))
 
     def draw(self, context):
         manip  = getattr(context.scene, "af_manipulator", None)

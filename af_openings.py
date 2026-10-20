@@ -33,6 +33,15 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 AF_OPEN_PROP = "archiforge_opening"
 AF_OPEN_VERSION = 1
 
@@ -744,7 +753,8 @@ class ARCHIFORGE_OT_opening(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Door / Window", icon='MESH_CUBE')
+        col.label(text="New Door / Window",
+                  **_icon(_item_icon(self.item_type, "opening"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -854,7 +864,7 @@ class ARCHIFORGE_PT_opening(Panel):
                 and obj.archiforge_opening.is_af_opening)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("opening", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_opening
@@ -867,7 +877,8 @@ class ARCHIFORGE_PT_opening(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "opening"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -884,7 +895,8 @@ class ARCHIFORGE_PT_opening(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Leaves", icon='MESH_CUBE')
+        col.label(text="Leaves",
+                  **_icon(_item_icon(t, "opening"), 'MESH_CUBE'))
         if is_door and t != 'DOOR_SLIDING':
             col.prop(props, "door_style", text="")
             col.prop(props, "handle_side", text="")
@@ -901,7 +913,7 @@ class ARCHIFORGE_PT_opening(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Wall Opening", icon='MOD_BOOLEAN')
+        col.label(text="Wall Opening", **_icon("boolean", 'MOD_BOOLEAN'))
         col.prop(props, "cut_opening")
         sub = col.column(align=True)
         sub.enabled = props.cut_opening

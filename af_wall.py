@@ -51,6 +51,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1107,7 +1113,7 @@ class ARCHIFORGE_PT_wall(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SNAP_FACE')
+        self.layout.label(text="", **_icon("wall", 'SNAP_FACE'))
 
     def draw(self, context):
         obj    = context.active_object

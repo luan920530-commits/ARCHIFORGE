@@ -40,6 +40,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -657,7 +663,7 @@ class ARCHIFORGE_PT_presets(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='ASSET_MANAGER')
+        self.layout.label(text="", **_icon("preset", 'ASSET_MANAGER'))
 
     def draw(self, context):
         layout   = self.layout
@@ -681,7 +687,7 @@ class ARCHIFORGE_PT_presets(Panel):
         row = col.row()
         row.label(
             text=f"Presets ({len(settings.items)})",
-            icon='ASSET_MANAGER'
+            **_icon("preset", 'ASSET_MANAGER')
         )
         row.operator(
             "archiforge.preset_refresh",

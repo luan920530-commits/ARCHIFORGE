@@ -27,6 +27,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 AF_TRUSS_PROP  = "archiforge_truss"
 AF_TRUSS_TYPES = [
@@ -503,7 +509,7 @@ class ARCHIFORGE_OT_truss(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Truss", icon='MESH_CUBE')
+        col.label(text="New Truss", **_icon("truss", 'MESH_CUBE'))
         col.prop(self, "truss_type")
         col.separator()
         col.prop(self, "span")
@@ -565,7 +571,7 @@ class ARCHIFORGE_PT_truss(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("truss", 'MESH_CUBE'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_truss

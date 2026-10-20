@@ -87,6 +87,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
     def _tr(text):
         return text
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1663,7 +1669,7 @@ class ARCHIFORGE_OT_floor(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Floor Pattern", icon='MESH_GRID')
+        col.label(text="New Floor Pattern", **_icon("floor", 'MESH_GRID'))
         col.prop(self, "pattern")
         col.separator()
         col.prop(self, "width")
@@ -1938,7 +1944,7 @@ class ARCHIFORGE_PT_floor(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_GRID')
+        self.layout.label(text="", **_icon("floor", 'MESH_GRID'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_floor
@@ -2113,7 +2119,7 @@ class ARCHIFORGE_PT_floor(Panel):
         row.operator(
             "archiforge.floor_from_wall",
             text="From Wall",
-            icon='SNAP_FACE',
+            **_icon("wall", 'SNAP_FACE'),
         )
 
 

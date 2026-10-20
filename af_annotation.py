@@ -40,6 +40,12 @@ except ImportError:  # pragma: no cover - fuera del paquete
         return text
 
 try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+try:
     from .af_outline_draw import _mouse_world_point, _screen_point
 except ImportError:  # pragma: no cover
     _mouse_world_point = None
@@ -500,21 +506,22 @@ class ARCHIFORGE_PT_annotations(Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='DRIVER_DISTANCE')
+        self.layout.label(text="", **_icon("annotation", 'DRIVER_DISTANCE'))
 
     def draw(self, context):
         layout = self.layout
         col = layout.column(align=True)
-        col.label(text="Dimensions", icon='DRIVER_DISTANCE')
+        col.label(text="Dimensions", **_icon("dimension", 'DRIVER_DISTANCE'))
         col.operator("archiforge.dimension_selected", text="Dimension Selected",
-                     icon='ARROW_LEFTRIGHT')
+                     **_icon("dimension", 'ARROW_LEFTRIGHT'))
         col.operator("archiforge.dimension_draw", text="Draw Dimension",
-                     icon='GREASEPENCIL')
+                     **_icon("dimension_draw", 'GREASEPENCIL'))
         col.separator()
-        col.label(text="Plan Symbols", icon='GRID')
-        col.operator("archiforge.grid_axes", text="Grid Axes", icon='GRID')
+        col.label(text="Plan Symbols", **_icon("annotation", 'GRID'))
+        col.operator("archiforge.grid_axes", text="Grid Axes",
+                     **_icon("grid_axes", 'GRID'))
         col.operator("archiforge.north_arrow", text="North Arrow",
-                     icon='ORIENTATION_VIEW')
+                     **_icon("north_arrow", 'ORIENTATION_VIEW'))
         count = len(annotation_objects(context.scene))
         if count:
             col.separator()

@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.12.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.13.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -199,11 +199,19 @@ omitió. Son distribuciones de referencia para empezar, no diseños normativos.
 
 ## 🎨 Iconos propios
 
-El addon incluye **24 iconos PNG originales** para la marca y sus módulos
-principales, con un estilo arquitectónico consistente. Se cargan como vistas
-previas de Blender y conservan un icono nativo de respaldo si falta algún
-recurso. No se descargan archivos ni se instalan dependencias al usar el addon;
-las instrucciones para editar o regenerar los iconos están en [`icons/README.md`](icons/README.md).
+El addon incluye **112 iconos PNG originales** con un estilo arquitectónico
+consistente: la marca, cada módulo, cada función (dibujar, colocar, desde
+curva, cotas, ejes, norte, conjuntos, unidades, idioma, presets, render…) y
+**un icono por cada ítem de los catálogos** —inodoro, lavamanos, ducha,
+tomacorriente, interruptor, lámparas, sillas, sofá, camas, nevera, estufa,
+materas, cuadros, puertas y ventanas por tipo, escaleras L / caracol, rampa,
+zapata, columna, viga, cubiertas a dos aguas / cuatro aguas / un agua, etc.—.
+Se cargan como vistas previas de Blender a través del helper `af_icons.py`
+(panel principal, Shift+A, Control Center, menús contextual y pie, cabeceras
+y secciones de todos los paneles, preferencias) y conservan un icono nativo
+de respaldo si falta algún recurso. No se descargan archivos ni se instalan
+dependencias al usar el addon; las instrucciones para editar o regenerar los
+iconos están en [`icons/README.md`](icons/README.md).
 
 ---
 
@@ -308,9 +316,10 @@ editor de shaders y el cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.12.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.13.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_i18n.py           # Idioma del addon: tablas para bpy.app.translations (v1.11)
+├── af_icons.py          # Helper de iconos propios: icon_kw(), ITEM_ICONS, OBJECT_ICONS (v1.13)
 ├── af_i18n_es.py        # Diccionario English ⇄ Español de toda la interfaz
 ├── af_material.py       # Gestión de materiales AF.* (planos o procedurales)
 ├── af_material_procedural.py # Recetas de nodos puras (ladrillo, bloque, cerámica, madera…) + validador
@@ -342,7 +351,7 @@ ArchiForge/
 ├── af_openings.py       # Puertas/ventanas paramétricas
 ├── af_quantities.py     # Integración de exportación CSV con Blender
 ├── af_quantities_io.py  # Cálculos/CSV puros, testeables sin Blender
-├── icons/               # 24 iconos PNG originales + fuente de regeneración
+├── icons/               # 112 iconos PNG originales + generador procedural
 └── tests/               # Regresiones, comprobaciones estáticas y stub headless de bpy
 ```
 
@@ -350,6 +359,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.13.0** — Iconografía completa: 88 iconos nuevos (112 en total) para funciones y cada ítem de los catálogos, helper `af_icons.py` y menús/paneles/preferencias con iconos propios
 - **v1.12.0** — Materiales procedurales de nodos, sistema de unidades métrico/imperial efectivo, mensajes de estado traducidos, anotaciones (cotas, ejes, norte), conjuntos baño CO / apartamento demo y unificación de los módulos de escaleras
 - **v1.11.0** — Idioma del addon English/Español operativo: traduce paneles, operadores, propiedades, desplegables y descripciones sin cambiar el idioma de Blender
 - **v1.10.0** — Ventanas abatibles/proyectantes que giran hoja, vidrio y divisiones; formatos de baldosa 30×30 → 60×120; juntas a ras/resaltadas/rehundidas; referencias de espesor de muro
