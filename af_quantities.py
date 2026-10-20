@@ -10,6 +10,7 @@ import bpy
 from bpy.types import Operator, Panel
 from bpy_extras.io_utils import ExportHelper
 
+from . import af_units
 from .af_quantities_io import (
     collect_quantities as _collect_quantities,
     format_number as _num,
@@ -17,17 +18,35 @@ from .af_quantities_io import (
     write_csv,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
 
-def collect_quantities(objects=None):
+
+def preferred_unit_system():
+    """Unit system chosen in the ArchiForge preferences (metric default)."""
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        return af_units.normalize(getattr(prefs, "unit_system", af_units.METRIC))
+    except Exception:  # noqa: BLE001 - preferences unavailable (background)
+        return af_units.METRIC
+
+
+def collect_quantities(objects=None, unit_system=None):
     """Return quantity rows for the requested scene objects.
 
     ``objects`` defaults to the active scene, not ``bpy.data.objects``; this
-    avoids mixing objects from other scenes in the file.
+    avoids mixing objects from other scenes in the file. ``unit_system``
+    defaults to the addon preference.
     """
     if objects is None:
         scene = getattr(bpy.context, "scene", None)
         objects = scene.objects if scene is not None else bpy.data.objects
-    return _collect_quantities(objects)
+    if unit_system is None:
+        unit_system = preferred_unit_system()
+    return _collect_quantities(objects, unit_system)
 
 
 class ARCHIFORGE_OT_quantities_export(Operator, ExportHelper):
@@ -44,9 +63,9 @@ class ARCHIFORGE_OT_quantities_export(Operator, ExportHelper):
             rows = collect_quantities(context.scene.objects)
             count = write_csv(self.filepath, rows)
         except (OSError, TypeError, ValueError, ReferenceError) as exc:
-            self.report({'ERROR'}, f"No se pudo exportar el CSV: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo exportar el CSV: {}").format(exc))
             return {'CANCELLED'}
-        self.report({'INFO'}, f"Se exportaron {count} filas a CSV")
+        self.report({'INFO'}, _tr("Se exportaron {} filas a CSV").format(count))
         return {'FINISHED'}
 
 

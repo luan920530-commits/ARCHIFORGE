@@ -44,6 +44,12 @@ from bpy.props import (
     FloatProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES — propiedades de cada tipo de objeto AF
@@ -148,7 +154,8 @@ class ARCHIFORGE_OT_preset_menu_invoke(Operator):
                 op = getattr(getattr(bpy.ops, category), name)
                 op('INVOKE_DEFAULT')
         except Exception as e:
-            self.report({'ERROR'}, f"Could not invoke '{self.operator_id}': {e}")
+            self.report({'ERROR'}, _tr("Could not invoke '{}': {}")
+                                   .format(self.operator_id, e))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -420,9 +427,9 @@ class ARCHIFORGE_OT_select_by_type(Operator):
 
         if count:
             label = AF_OBJECT_TYPES.get(attr, ("Unknown",))[0]
-            self.report({'INFO'}, f"Selected {count} {label} object(s)")
+            self.report({'INFO'}, _tr("Selected {} {} object(s)").format(count, label))
         else:
-            self.report({'WARNING'}, "No objects of this type found")
+            self.report({'WARNING'}, _tr("No objects of this type found"))
         return {'FINISHED'}
 
 
@@ -439,7 +446,7 @@ class ARCHIFORGE_OT_select_all_af(Operator):
         for obj, attr, label, icon in _get_af_objects(context.scene):
             obj.select_set(True)
             count += 1
-        self.report({'INFO'}, f"Selected {count} ArchiForge object(s)")
+        self.report({'INFO'}, _tr("Selected {} ArchiForge object(s)").format(count))
         return {'FINISHED'}
 
 
@@ -483,9 +490,9 @@ class ARCHIFORGE_OT_rebuild_all(Operator):
             except Exception as e:
                 errors += 1
 
-        msg = f"Rebuilt {rebuilt} object(s)"
+        msg = _tr("Rebuilt {} object(s)").format(rebuilt)
         if errors:
-            msg += f" | {errors} error(s)"
+            msg += _tr(" | {} error(s)").format(errors)
             self.report({'WARNING'}, msg)
         else:
             self.report({'INFO'}, msg)
@@ -517,7 +524,7 @@ class ARCHIFORGE_OT_isolate_af_type(Operator):
             obj.hide_viewport = not is_af_obj
 
         label = AF_OBJECT_TYPES.get(attr, ("Unknown",))[0]
-        self.report({'INFO'}, f"Isolating: {label} objects")
+        self.report({'INFO'}, _tr("Isolating: {} objects").format(label))
         return {'FINISHED'}
 
 
@@ -531,7 +538,7 @@ class ARCHIFORGE_OT_show_all(Operator):
     def execute(self, context):
         for obj, attr, label, icon in _get_af_objects(context.scene):
             obj.hide_viewport = False
-        self.report({'INFO'}, "All AF objects visible")
+        self.report({'INFO'}, _tr("All AF objects visible"))
         return {'FINISHED'}
 
 
@@ -1037,7 +1044,7 @@ class ARCHIFORGE_OT_set_grid(Operator):
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
                         space.overlay.grid_scale = self.grid_size
-        self.report({'INFO'}, f"Grid set to {self.grid_size:.3f}m")
+        self.report({'INFO'}, _tr("Grid set to {:.3f}m").format(self.grid_size))
         return {'FINISHED'}
 
 

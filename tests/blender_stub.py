@@ -272,7 +272,18 @@ def install():
     bpy.utils = bpy_utils
     bpy.data = types.SimpleNamespace(objects={}, materials={}, meshes={})
     bpy.ops = types.SimpleNamespace()
-    bpy.app = types.SimpleNamespace(version=(3, 3, 0), version_string="3.3.0")
+    bpy_app = types.ModuleType("bpy.app")
+    bpy_app.version = (3, 3, 0)
+    bpy_app.version_string = "3.3.0"
+    bpy_app_handlers = types.ModuleType("bpy.app.handlers")
+    bpy_app_handlers.persistent = lambda func: func
+    bpy_app_handlers.load_post = []
+    bpy_app_handlers.depsgraph_update_post = []
+    bpy_app_handlers.save_pre = []
+    bpy_app.handlers = bpy_app_handlers
+    bpy_app.timers = types.SimpleNamespace(
+        register=_noop, unregister=_noop, is_registered=lambda f: False)
+    bpy.app = bpy_app
     bpy.context = types.SimpleNamespace()
 
     bmesh = types.ModuleType("bmesh")
@@ -289,6 +300,8 @@ def install():
         "bpy.types": bpy_types,
         "bpy.props": bpy_props,
         "bpy.utils": bpy_utils,
+        "bpy.app": bpy_app,
+        "bpy.app.handlers": bpy_app_handlers,
         "bmesh": bmesh,
         "mathutils": mathutils,
     })

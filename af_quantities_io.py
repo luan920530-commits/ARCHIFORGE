@@ -8,6 +8,11 @@ CSV safety rules can be regression-tested with the standard Python runtime.
 import csv
 import math
 
+try:
+    from . import af_units
+except ImportError:  # pragma: no cover - imported outside the package
+    import af_units
+
 
 CSV_HEADERS = ("Categoría", "Tipo", "Objeto", "Cantidad", "Unidad", "Medidas")
 FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -200,7 +205,32 @@ def _slab_area(props):
     return max(0.0, area - math.fsum(hole_areas))
 
 
-def _dimensions(props, width="width", depth="depth", height="height"):
+class _UnitFormatter:
+    """Converts internal metres to the requested unit system."""
+
+    def __init__(self, system):
+        self.system = af_units.normalize(system)
+        self.length_unit = af_units.length_unit(self.system)
+        self.area_unit = af_units.area_unit(self.system)
+        self.volume_unit = af_units.volume_unit(self.system)
+
+    def length(self, meters):
+        return af_units.convert_length(meters, self.system)
+
+    def area(self, square_meters):
+        return af_units.convert_area(square_meters, self.system)
+
+    def volume(self, cubic_meters):
+        return af_units.convert_volume(cubic_meters, self.system)
+
+    def fmt(self, meters):
+        """Formatted length in the target unit (number only)."""
+        return format_number(self.length(meters))
+
+
+def _dimensions(props, width="width", depth="depth", height="height",
+                units=None):
+    units = units or _UnitFormatter(af_units.METRIC)
     values = (
         _property_number(props, width),
         _property_number(props, depth),
@@ -208,23 +238,29 @@ def _dimensions(props, width="width", depth="depth", height="height"):
     )
     if not any(value > 0.0 for value in values):
         return "—"
-    return "{}x{}x{} m".format(*(format_number(value) for value in values))
+    return "{}x{}x{} {}".format(*(units.fmt(value) for value in values),
+                                units.length_unit)
 
 
 def _append_unit_row(rows, category, props, obj_name, type_fields,
-                     dimension_fields=("width", "depth", "height")):
+                     dimension_fields=("width", "depth", "height"),
+                     units=None):
     item_type = _property_text(props, *type_fields, default=category)
-    dimensions = _dimensions(props, *dimension_fields)
+    dimensions = _dimensions(props, *dimension_fields, units=units)
     rows.append((category, item_type, obj_name, 1, "und", dimensions))
 
 
-def collect_quantities(objects):
+def collect_quantities(objects, unit_system=af_units.METRIC):
     """Collect quantity rows from an iterable of scene objects.
 
     Each row is ``(category, type, object, quantity, unit, dimensions)``.
     Values are parametric estimates, not code-compliant material takeoffs.
+    Objects are modelled in metres; ``unit_system`` (``'METRIC'`` or
+    ``'IMPERIAL'``) converts lengths, areas and volumes and labels the
+    units (``m``/``m2``/``m3`` or ``ft``/``ft2``/``ft3``).
     """
     rows = []
+    u = _UnitFormatter(unit_system)
     for obj in objects:
         obj_name = _object_name(obj)
 
@@ -235,15 +271,16 @@ def collect_quantities(objects):
             thickness = _property_number(props, "width")
             if length > 0.0 and height > 0.0:
                 item_type = _property_text(props, "wall_type", default="Muro")
-                measures = "L={} H={} e={} m".format(
-                    format_number(length), format_number(height),
-                    format_number(thickness),
+                measures = "L={} H={} e={} {}".format(
+                    u.fmt(length), u.fmt(height), u.fmt(thickness),
+                    u.length_unit,
                 )
                 rows.append(("Muros", item_type, obj_name,
-                             length * height, "m2", measures))
+                             u.area(length * height), u.area_unit, measures))
                 if thickness > 0.0:
                     rows.append(("Muros", item_type, obj_name,
-                                 length * height * thickness, "m3", measures))
+                                 u.volume(length * height * thickness),
+                                 u.volume_unit, measures))
 
         props = _registered_props(obj, "archiforge_slab", "is_af_slab")
         if props is not None:
@@ -262,16 +299,16 @@ def collect_quantities(objects):
                 polygon_width, polygon_depth = _polygon_bounds(vertices)
                 if polygon_width > 0.0 and polygon_depth > 0.0:
                     width, depth = polygon_width, polygon_depth
-            dimensions = "{}x{} e={} m (área neta aprox.)".format(
-                format_number(width), format_number(depth),
-                format_number(thickness),
+            dimensions = "{}x{} e={} {} (área neta aprox.)".format(
+                u.fmt(width), u.fmt(depth), u.fmt(thickness), u.length_unit,
             )
             if area > 0.0:
                 rows.append(("Losas", item_type, obj_name,
-                             area, "m2", dimensions))
+                             u.area(area), u.area_unit, dimensions))
                 if thickness > 0.0:
                     rows.append(("Losas", item_type, obj_name,
-                                 area * thickness, "m3", dimensions))
+                                 u.volume(area * thickness), u.volume_unit,
+                                 dimensions))
 
         props = _registered_props(obj, "archiforge_floor", "is_af_floor")
         if props is not None:
@@ -293,9 +330,9 @@ def collect_quantities(objects):
             if floor_area > 0.0:
                 rows.append((
                     "Pisos", _property_text(props, "pattern", default="Piso"),
-                    obj_name, floor_area, "m2",
-                    "{}x{} m ({})".format(
-                        format_number(width), format_number(depth), area_label),
+                    obj_name, u.area(floor_area), u.area_unit,
+                    "{}x{} {} ({})".format(
+                        u.fmt(width), u.fmt(depth), u.length_unit, area_label),
                 ))
 
         props = _registered_props(obj, "archiforge_fence", "is_af_fence")
@@ -308,10 +345,11 @@ def collect_quantities(objects):
             if length > 0.0:
                 rows.append((
                     "Cercas", _property_text(props, "fence_type", default="Valla"),
-                    obj_name, length, "m",
-                    "L={} H={} m".format(
-                        format_number(length),
-                        format_number(_property_number(props, "height")),
+                    obj_name, u.length(length), u.length_unit,
+                    "L={} H={} {}".format(
+                        u.fmt(length),
+                        u.fmt(_property_number(props, "height")),
+                        u.length_unit,
                     ),
                 ))
 
@@ -322,46 +360,48 @@ def collect_quantities(objects):
             if width > 0.0 and depth > 0.0:
                 rows.append((
                     "Techos", _property_text(props, "roof_type", default="Techo"),
-                    obj_name, width * depth, "m2 proy.",
-                    "{}x{} m (proyección; no incluye pendiente)".format(
-                        format_number(width), format_number(depth)),
+                    obj_name, u.area(width * depth), u.area_unit + " proy.",
+                    "{}x{} {} (proyección; no incluye pendiente)".format(
+                        u.fmt(width), u.fmt(depth), u.length_unit),
                 ))
 
         props = _registered_props(obj, "archiforge_truss", "is_af_truss")
         if props is not None:
             _append_unit_row(
                 rows, "Cerchas", props, obj_name, ("truss_type",),
-                ("span", "depth", "width"),
+                ("span", "depth", "width"), units=u,
             )
 
         props = _registered_props(obj, "archiforge_struct", "is_af_struct")
         if props is not None:
             _append_unit_row(
-                rows, "Estructura", props, obj_name, ("item_type",))
+                rows, "Estructura", props, obj_name, ("item_type",), units=u)
 
         props = _registered_props(obj, "archiforge_door", "is_af_door")
         if props is not None:
-            _append_unit_row(rows, "Puertas", props, obj_name, ("door_type",))
+            _append_unit_row(rows, "Puertas", props, obj_name, ("door_type",),
+                             units=u)
 
         props = _registered_props(obj, "archiforge_window", "is_af_window")
         if props is not None:
             _append_unit_row(
-                rows, "Ventanas", props, obj_name, ("window_type",))
+                rows, "Ventanas", props, obj_name, ("window_type",), units=u)
 
         props = _registered_props(obj, "archiforge_opening", "is_af_opening")
         if props is not None:
             _append_unit_row(
-                rows, "Aberturas", props, obj_name, ("item_type",))
+                rows, "Aberturas", props, obj_name, ("item_type",), units=u)
 
-        # Both the legacy staircase and the newer stair/ramp module are kept
-        # for backwards compatibility and expose separate Object properties.
+        # ``archiforge_stairs`` belonged to the duplicate module removed in
+        # 1.12; af_stair migrates it on load, but objects exported before
+        # that migration are still counted.
         for attr in ("archiforge_stair", "archiforge_stairs"):
             props = _registered_props(obj, attr, "is_af_stair")
             if props is None:
                 continue
             item_type = _property_text(props, "item_type", default="Escalera")
-            width = format_number(_property_number(props, "width"))
-            rise = format_number(_property_number(props, "total_rise"))
+            width = u.fmt(_property_number(props, "width"))
+            rise = u.fmt(_property_number(props, "total_rise"))
             if item_type == "RAMP":
                 slope = 100.0 * _property_number(props, "ramp_slope")
                 measures = "A={} H={} pendiente={}%".format(
@@ -385,10 +425,11 @@ def collect_quantities(objects):
             }.get(room, "Muebles y decoración")
             item_type = _property_text(
                 room_asset, "asset_type", default="Objeto / set")
-            measures = "{}×{}×{} m".format(
-                format_number(_property_number(room_asset, "width")),
-                format_number(_property_number(room_asset, "depth")),
-                format_number(_property_number(room_asset, "height")),
+            measures = "{}×{}×{} {}".format(
+                u.fmt(_property_number(room_asset, "width")),
+                u.fmt(_property_number(room_asset, "depth")),
+                u.fmt(_property_number(room_asset, "height")),
+                u.length_unit,
             )
             rows.append((category, item_type, obj_name, 1, "und", measures))
 
@@ -403,7 +444,7 @@ def collect_quantities(objects):
             props = _registered_props(obj, attr, marker)
             if props is not None:
                 _append_unit_row(
-                    rows, category, props, obj_name, ("item_type",))
+                    rows, category, props, obj_name, ("item_type",), units=u)
 
     return rows
 

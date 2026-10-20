@@ -27,6 +27,12 @@ except ImportError:
     af_material = None
     AF_ObjectBuilder = None
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 AF_STRUCT_PROP = "archiforge_struct"
 AF_STRUCT_VERSION = 1
 
@@ -666,7 +672,7 @@ class ARCHIFORGE_OT_structure(Operator):
             _SUSPEND = False
         _rebuild_struct_mesh(obj, props)
         _sync_struct_labels(obj, props)
-        self.report({'INFO'}, f"Structure created: {obj.name}")
+        self.report({'INFO'}, _tr("Structure created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -687,7 +693,7 @@ class ARCHIFORGE_OT_structure_update(Operator):
         obj = context.active_object
         _rebuild_struct_mesh(obj, obj.archiforge_struct)
         _sync_struct_labels(obj, obj.archiforge_struct)
-        self.report({'INFO'}, "Structure updated")
+        self.report({'INFO'}, _tr("Structure updated"))
         return {'FINISHED'}
 
 
@@ -710,7 +716,7 @@ class ARCHIFORGE_OT_structure_reset(Operator):
         _apply_type_defaults(props, props.item_type)
         _rebuild_struct_mesh(obj, props)
         _sync_struct_labels(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 

@@ -28,11 +28,12 @@ UI_MODULES = tuple(sorted(
         and path.name not in {
             "af_floor_geometry.py", "af_wall_path.py", "af_window_geometry.py",
             "af_quantities_io.py", "af_objects_base.py", "af_outline_draw.py",
-            "af_i18n.py", "af_i18n_es.py",
+            "af_i18n.py", "af_i18n_es.py", "af_units.py",
         })
 ))
 
 LABEL_KEYWORDS = ("name", "text", "heading", "bl_label")
+REPORT_TRANSLATORS = ("_tr", "tr_report")
 TOOLTIP_KEYWORDS = ("description", "bl_description")
 CLASS_ATTRIBUTES = ("bl_label", "bl_description")
 
@@ -71,8 +72,12 @@ def _candidate_strings(node):
     return []
 
 
-def is_translatable(text):
-    """Heuristic filter for strings that are real UI text, not identifiers."""
+def is_translatable(text, allow_templates=False):
+    """Heuristic filter for strings that are real UI text, not identifiers.
+
+    ``allow_templates`` accepts ``str.format`` templates, which is how
+    operator report messages are written (``_tr("Created {}")``).
+    """
     stripped = text.strip()
     if not stripped or not re.search(r"[A-Za-zÀ-ÿ]", stripped):
         return False
@@ -83,7 +88,7 @@ def is_translatable(text):
     if re.fullmatch(r"[A-Za-z0-9_.]+", stripped) and ("_" in stripped
                                                        or "." in stripped):
         return False  # class names, idnames, file names
-    if "{" in stripped and "}" in stripped:
+    if "{" in stripped and "}" in stripped and not allow_templates:
         return False  # str.format templates are filled before display
     if stripped.startswith(("AF.", "AF_", "archiforge_")):
         return False
@@ -93,9 +98,9 @@ def is_translatable(text):
 def _collect_from_tree(tree):
     labels, tooltips = set(), set()
 
-    def add(bucket, node):
+    def add(bucket, node, allow_templates=False):
         for text in _candidate_strings(node):
-            if is_translatable(text):
+            if is_translatable(text, allow_templates):
                 bucket.add(text)
 
     for node in ast.walk(tree):
@@ -114,6 +119,10 @@ def _collect_from_tree(tree):
                 # Local helpers such as ``bath_btn(row, "Toilet", 'TOILET')``.
                 for arg in node.args[1:2]:
                     add(labels, arg)
+            elif func_name in REPORT_TRANSLATORS:
+                # Operator report templates: ``_tr("Created {}").format(n)``.
+                for arg in node.args[:1]:
+                    add(labels, arg, allow_templates=True)
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id in CLASS_ATTRIBUTES:

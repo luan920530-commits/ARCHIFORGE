@@ -229,5 +229,81 @@ class BlenderIntegrationTests(unittest.TestCase):
                          "Nightstand")
 
 
+def _is_translated_message(node):
+    """True when ``node`` is ``_tr(...)``, ``_tr(...).format(...)``, a
+    conditional expression of those, or a parenthesised combination."""
+    if isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in ui_strings.REPORT_TRANSLATORS:
+            return True
+        if isinstance(func, ast.Attribute) and func.attr == "format":
+            return _is_translated_message(func.value)
+        return False
+    if isinstance(node, ast.IfExp):
+        return _is_translated_message(node.body) and _is_translated_message(node.orelse)
+    if isinstance(node, ast.BoolOp):
+        return all(_is_translated_message(v) for v in node.values)
+    return False
+
+
+class ReportTranslationHealthTests(unittest.TestCase):
+    """Every ``self.report()`` message must go through ``tr_report``."""
+
+    @staticmethod
+    def _report_calls(function):
+        for node in ast.walk(function):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "report"
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"
+                    and len(node.args) >= 2):
+                yield node
+
+    @staticmethod
+    def _translated_names(function):
+        """Local variables that only ever receive translated messages."""
+        names = {}
+        for node in ast.walk(function):
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                    and isinstance(node.targets[0], ast.Name):
+                target = node.targets[0].id
+                ok = _is_translated_message(node.value)
+                names[target] = names.get(target, True) and ok
+            elif isinstance(node, ast.AugAssign) \
+                    and isinstance(node.target, ast.Name):
+                target = node.target.id
+                ok = _is_translated_message(node.value)
+                names[target] = names.get(target, True) and ok
+        return {name for name, ok in names.items() if ok}
+
+    def test_every_report_message_is_wrapped_in_tr(self):
+        offenders = []
+        for path in sorted(ROOT.glob("af_*.py")) + [ROOT / "__init__.py"]:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for function in ast.walk(tree):
+                if not isinstance(function, ast.FunctionDef):
+                    continue
+                translated = self._translated_names(function)
+                for node in self._report_calls(function):
+                    message = node.args[1]
+                    if isinstance(message, ast.Name) and message.id in translated:
+                        continue
+                    if not _is_translated_message(message):
+                        offenders.append("{}:{}".format(path.name, node.lineno))
+        self.assertEqual(offenders, [],
+                         "self.report() messages not wrapped in _tr(): {}".format(
+                             offenders[:20]))
+
+    def test_modules_with_reports_import_the_translator(self):
+        pattern = re.compile(r"self\.report\(")
+        for path in sorted(ROOT.glob("af_*.py")):
+            source = path.read_text(encoding="utf-8")
+            if pattern.search(source):
+                self.assertIn("tr_report as _tr", source,
+                              "{} reports without importing tr_report".format(
+                                  path.name))
+
+
 if __name__ == "__main__":
     unittest.main()

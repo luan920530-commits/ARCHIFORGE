@@ -24,6 +24,12 @@ from .af_room_assets_catalog import (
     find_asset,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_ROOM_ASSET_PROP = "archiforge_room_asset"
 AF_ROOM_ASSET_VERSION = 1
@@ -1448,7 +1454,7 @@ class ARCHIFORGE_OT_room_asset(Operator):
         global _SUSPEND
         record = find_asset(self.room, self.asset_type)
         if record is None:
-            self.report({'ERROR'}, "El objeto no pertenece a la habitación elegida")
+            self.report({'ERROR'}, _tr("El objeto no pertenece a la habitación elegida"))
             return {'CANCELLED'}
         if self.auto_dimensions:
             width, depth, height = record[5:8]
@@ -1475,12 +1481,12 @@ class ARCHIFORGE_OT_room_asset(Operator):
                 bpy.data.objects.remove(obj, do_unlink=True)
                 if mesh is not None and mesh.users == 0:
                     bpy.data.meshes.remove(mesh)
-            self.report({'ERROR'}, f"No se pudo crear el objeto: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo crear el objeto: {}").format(exc))
             return {'CANCELLED'}
         finally:
             _SUSPEND = previous_suspend
 
-        self.report({'INFO'}, f"{record[1]} creado: {obj.name}")
+        self.report({'INFO'}, _tr("{} creado: {}").format(record[1], obj.name))
         return {'FINISHED'}
 
 
@@ -1521,7 +1527,7 @@ class ARCHIFORGE_OT_room_asset_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_room_asset_mesh(obj, obj.archiforge_room_asset)
-        self.report({'INFO'}, "Room asset rebuilt")
+        self.report({'INFO'}, _tr("Room asset rebuilt"))
         return {'FINISHED'}
 
 

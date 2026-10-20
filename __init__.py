@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 11, 0),
+    "version"     : (1, 12, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -56,6 +56,12 @@ __all__ = [
 # ════════════════════════════════════════════════════════════
 import os
 import sys
+
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
 
 # Nivel de log: 0=silent, 1=errors, 2=warnings, 3=info, 4=debug
 AF_LOG_LEVEL = 3
@@ -81,6 +87,40 @@ def _i18n_module():
     """Módulo af_i18n si cargó correctamente (import tolerante)."""
     mod = globals().get("af_i18n")
     return mod if mod is not None and hasattr(mod, "apply_language") else None
+
+
+def _units_module():
+    mod = globals().get("af_units")
+    return mod if mod is not None and hasattr(mod, "apply_to_scenes") else None
+
+
+def _apply_unit_system(system):
+    """Escribe el sistema de unidades en todas las escenas abiertas."""
+    mod = _units_module()
+    if mod is None:
+        return 0
+    try:
+        return mod.apply_to_scenes(bpy.data.scenes, system)
+    except Exception as e:  # noqa: BLE001 - bpy.data restringido
+        af_log(f"No se pudo aplicar el sistema de unidades: {e}", level=2)
+        return 0
+
+
+def _on_unit_system_update(self, context):
+    """Sincroniza las unidades de la escena con la preferencia del addon."""
+    _apply_unit_system(self.unit_system)
+
+
+def _on_procedural_materials_update(self, context):
+    """Regenera los materiales AF del archivo en el modo elegido."""
+    mod = globals().get("af_material")
+    if mod is None or not hasattr(mod, "refresh_existing_af_materials"):
+        return
+    try:
+        count = mod.refresh_existing_af_materials()
+        af_log(f"Materiales AF regenerados: {count}", level=3)
+    except Exception as e:  # noqa: BLE001
+        af_log(f"No se pudieron regenerar los materiales: {e}", level=2)
 
 
 def _on_language_update(self, context):
@@ -116,6 +156,8 @@ if "bpy" in locals():
         # 1. Core (base del sistema)
         "af_i18n_es",
         "af_i18n",
+        "af_units",
+        "af_material_procedural",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -147,11 +189,13 @@ if "bpy" in locals():
         "af_kitchen",
         "af_decor",
         "af_openings",
-        "af_stairs",
         # Pure helper, reloaded before the Blender-facing exporter.
         "af_quantities_io",
         "af_quantities",
         "af_structure",
+        "af_annotation_geometry",
+        "af_annotation",
+        "af_sets",
         "af_control_center",
         # 4. UI (último, depende de todo lo anterior)
         "af_rendering",
@@ -190,6 +234,8 @@ else:
         # 1. Core (base del sistema)
         "af_i18n_es",
         "af_i18n",
+        "af_units",
+        "af_material_procedural",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -221,11 +267,13 @@ else:
         "af_kitchen",
         "af_decor",
         "af_openings",
-        "af_stairs",
         # Pure helper, reloaded before the Blender-facing exporter.
         "af_quantities_io",
         "af_quantities",
         "af_structure",
+        "af_annotation_geometry",
+        "af_annotation",
+        "af_sets",
         "af_control_center",
         # 4. UI (último, depende de todo lo anterior)
         "af_rendering",
@@ -252,7 +300,7 @@ else:
 import bpy
 from bpy.utils import previews
 from bpy.types import (
-    Panel, Menu,
+    Panel, Menu, Operator,
     AddonPreferences,
 )
 from bpy.props import (
@@ -412,6 +460,16 @@ class ArchiForge_Pref(AddonPreferences):
         description = "Automatically cut openings in walls for doors/windows",
         default     = True,
     )
+    procedural_materials : BoolProperty(
+        name        = "Procedural Materials",
+        description = ("Build node-based textures (brick and block bond, "
+                       "ceramic, wood grain, concrete, marble, clay, "
+                       "plaster, fabric) for the ArchiForge materials "
+                       "instead of flat colors; visible in Material "
+                       "Preview and Rendered shading"),
+        default     = True,
+        update      = _on_procedural_materials_update,
+    )
     auto_material : BoolProperty(
         name        = "Auto Material",
         description = "Assign base materials automatically on object creation",
@@ -419,11 +477,14 @@ class ArchiForge_Pref(AddonPreferences):
     )
     unit_system : EnumProperty(
         name  = "Unit System",
+        description = ("Units shown by ArchiForge and used in the quantities "
+                       "CSV; applied to the unit settings of the open scenes"),
         items = [
             ('METRIC',   "Metric (m/cm)",  "Use meters and centimeters"),
             ('IMPERIAL', "Imperial (ft/in)", "Use feet and inches"),
         ],
         default = 'METRIC',
+        update = _on_unit_system_update,
     )
     matlib_path : StringProperty(
         name        = "Material Library Folder",
@@ -607,12 +668,14 @@ class ArchiForge_Pref(AddonPreferences):
         self._draw_language_hints(box)
         box.prop(self, "create_submenu")
         box.prop(self, "unit_system")
+        self._draw_unit_hints(box)
 
         col.separator()
         box = col.box()
         box.label(text="Behavior", **_icon_kw(icons, "snap", 'MODIFIER'))
         box.prop(self, "auto_boolean")
         box.prop(self, "auto_material")
+        box.prop(self, "procedural_materials")
 
         col.separator()
         box = col.box()
@@ -638,6 +701,24 @@ class ArchiForge_Pref(AddonPreferences):
         row = col.row(align=True)
         row.prop(view, "use_translate_interface", text="Translate Interface")
         row.prop(view, "use_translate_tooltips", text="Translate Tooltips")
+
+    def _draw_unit_hints(self, box):
+        """Avisa cuando la escena activa no usa el sistema elegido (p. ej.
+        tras abrir otro archivo) y ofrece aplicarlo."""
+        mod = _units_module()
+        if mod is None:
+            return
+        try:
+            scene = bpy.context.scene
+        except Exception:  # noqa: BLE001
+            return
+        if scene is None or mod.scene_system(scene) == self.unit_system:
+            return
+        row = box.row(align=True)
+        row.label(text="The active scene uses another unit system",
+                  icon='INFO')
+        row.operator("archiforge.apply_unit_system", text="Apply to Scenes",
+                     icon='SCENE_DATA')
 
     def _draw_manipulators(self, layout):
         col = layout.column(align=True)
@@ -717,6 +798,28 @@ class ArchiForge_Pref(AddonPreferences):
 # ════════════════════════════════════════════════════════════
 #  PANEL PRINCIPAL — "ArchiForge" en Sidebar
 # ════════════════════════════════════════════════════════════
+class ARCHIFORGE_OT_apply_unit_system(Operator):
+    """Escribe la preferencia Unit System en las escenas del archivo."""
+    bl_idname = "archiforge.apply_unit_system"
+    bl_label = "Apply Unit System to Scenes"
+    bl_description = ("Set the unit settings of every open scene to the "
+                      "ArchiForge unit system (metric or imperial)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        try:
+            system = context.preferences.addons[__name__].preferences.unit_system
+        except Exception:  # noqa: BLE001
+            system = 'METRIC'
+        count = _apply_unit_system(system)
+        if count:
+            self.report({'INFO'}, _tr("Unit system applied to {} scene(s)")
+                                  .format(count))
+            return {'FINISHED'}
+        self.report({'WARNING'}, _tr("Unit system could not be applied"))
+        return {'CANCELLED'}
+
+
 class ARCHIFORGE_PT_create(Panel):
     bl_label       = "ArchiForge"
     bl_idname      = "ARCHIFORGE_PT_create"
@@ -775,10 +878,10 @@ class ARCHIFORGE_PT_create(Panel):
             "af_openings", "AF_OPEN_TYPES",
             {'DOOR_SINGLE', 'WIN_SLIDING'})
         stair_avail = _available_ids(
-            "af_stairs", "AF_STAIR_TYPES",
+            "af_stair", "AF_STAIR_TYPES",
             {'STRAIGHT', 'RAMP'})
         has_open = _op_exists("archiforge.opening")
-        has_stair = _op_exists("archiforge.stairs")
+        has_stair = _op_exists("archiforge.stair")
         has_quant = _op_exists("archiforge.quantities_export")
         struct_avail = _available_ids(
             "af_structure", "AF_STRUCT_TYPES",
@@ -839,7 +942,7 @@ class ARCHIFORGE_PT_create(Panel):
         def stair_btn(row, text, tid, icon='MESH_CUBE'):
             if has_stair and tid in stair_avail:
                 row.operator(
-                    "archiforge.stairs", text=text,
+                    "archiforge.stair", text=text,
                     **_icon_kw(icons, "stair", icon)
                 ).item_type = tid
 
@@ -1156,6 +1259,35 @@ class ARCHIFORGE_PT_create(Panel):
 
             layout.separator(factor=0.3)
 
+        # ── SECCIÓN: Anotaciones (v1.12) ─────────────────────
+        if _op_exists("archiforge.dimension_selected"):
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Annotations", icon='DRIVER_DISTANCE')
+            row = col.row(align=True)
+            row.operator("archiforge.dimension_selected", text="Dimension",
+                         icon='ARROW_LEFTRIGHT')
+            row.operator("archiforge.dimension_draw", text="Draw",
+                         icon='GREASEPENCIL')
+            row = col.row(align=True)
+            row.operator("archiforge.grid_axes", text="Axes", icon='GRID')
+            row.operator("archiforge.north_arrow", text="North",
+                         icon='ORIENTATION_VIEW')
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Conjuntos (v1.12) ───────────────────────
+        if _op_exists("archiforge.set_bathroom"):
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Sets", icon='HOME')
+            col.operator("archiforge.set_bathroom",
+                         text="Complete Bathroom (CO)", icon='SPHERE')
+            col.operator("archiforge.set_apartment", text="Demo Apartment",
+                         icon='HOME')
+
+            layout.separator(factor=0.3)
+
         # ── SECCIÓN: Estructura (NUEVO — v1.4) ───────────────
         if has_struct:
             box = layout.box()
@@ -1322,8 +1454,8 @@ def _draw_shift_a_menu(self, context):
     if _op_exists("archiforge.opening"):
         layout.operator("archiforge.opening", text="Door/Window",
                         **_icon_kw(icons, "opening", 'MESH_CUBE'))
-    if _op_exists("archiforge.stairs"):
-        layout.operator("archiforge.stairs", text="Stair/Ramp",
+    if _op_exists("archiforge.stair"):
+        layout.operator("archiforge.stair", text="Stair/Ramp",
                         **_icon_kw(icons, "stair", 'MESH_CUBE'))
     if _op_exists("archiforge.structure"):
         layout.operator("archiforge.structure", text="Structure",
@@ -1403,9 +1535,10 @@ _modules = [
     af_kitchen,
     af_decor,
     af_openings,
-    af_stairs,
     af_quantities,
     af_structure,
+    af_annotation,
+    af_sets,
     af_control_center,
     af_rendering,
     af_panel,
@@ -1418,6 +1551,7 @@ _modules = [m for m in _modules if m is not None]
 # Clases propias de __init__.py
 _own_classes = [
     ArchiForge_Pref,
+    ARCHIFORGE_OT_apply_unit_system,
     ARCHIFORGE_PT_create,
     ARCHIFORGE_MT_create,
 ]

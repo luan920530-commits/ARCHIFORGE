@@ -44,6 +44,12 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_ELECTRICAL_PROP = "archiforge_electrical"
 AF_ELEC_VERSION = 3  # v2.1: detalles con transform
@@ -1427,7 +1433,7 @@ class ARCHIFORGE_OT_electrical(Operator):
             _SUSPEND = False
         _rebuild_electrical_mesh(obj, props, sync_light=True,
                                  context=context)
-        self.report({'INFO'}, f"Electrical item created: {obj.name}")
+        self.report({'INFO'}, _tr("Electrical item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1448,7 +1454,7 @@ class ARCHIFORGE_OT_electrical_update(Operator):
         obj = context.active_object
         _rebuild_electrical_mesh(obj, obj.archiforge_electrical,
                                  sync_light=True, context=context)
-        self.report({'INFO'}, "Electrical item updated")
+        self.report({'INFO'}, _tr("Electrical item updated"))
         return {'FINISHED'}
 
 
@@ -1470,7 +1476,7 @@ class ARCHIFORGE_OT_electrical_reset(Operator):
         props = obj.archiforge_electrical
         _apply_type_defaults(props, props.item_type)
         _rebuild_electrical_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset to defaults")
+        self.report({'INFO'}, _tr("Dimensions reset to defaults"))
         return {'FINISHED'}
 
 
@@ -1496,9 +1502,9 @@ class ARCHIFORGE_OT_electrical_light(Operator):
         _ensure_light_object(context, obj, props, gen.light_local,
                              gen.light_kind)
         if _get_light_obj(props) is not None:
-            self.report({'INFO'}, "Light synced")
+            self.report({'INFO'}, _tr("Light synced"))
         else:
-            self.report({'INFO'}, "Light removed/hidden")
+            self.report({'INFO'}, _tr("Light removed/hidden"))
         return {'FINISHED'}
 
 

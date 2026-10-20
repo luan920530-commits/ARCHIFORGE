@@ -58,6 +58,24 @@ class ARCHIFORGE_MT_menu_main(Menu):
         layout.label(text="Extras", icon='PLUS')
         layout.operator("archiforge.fence", text="Fence", icon='MESH_PLANE')
 
+        # ── Conjuntos y anotaciones (v1.12) ───────────────────
+        if hasattr(bpy.types, "ARCHIFORGE_OT_set_bathroom"):
+            layout.separator()
+            layout.label(text="Sets", icon='HOME')
+            layout.operator("archiforge.set_bathroom",
+                            text="Complete Bathroom (CO)", icon='SPHERE')
+            layout.operator("archiforge.set_apartment",
+                            text="Demo Apartment", icon='HOME')
+        if hasattr(bpy.types, "ARCHIFORGE_OT_dimension_selected"):
+            layout.separator()
+            layout.label(text="Annotations", icon='DRIVER_DISTANCE')
+            layout.operator("archiforge.dimension_selected",
+                            text="Dimension Selected", icon='ARROW_LEFTRIGHT')
+            layout.operator("archiforge.grid_axes", text="Grid Axes",
+                            icon='GRID')
+            layout.operator("archiforge.north_arrow", text="North Arrow",
+                            icon='ORIENTATION_VIEW')
+
 
 # ════════════════════════════════════════════════════════════
 #  MENÚ CONTEXTUAL — clic derecho en objeto AF seleccionado

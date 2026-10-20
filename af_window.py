@@ -42,6 +42,12 @@ from .af_window_geometry import (
     window_type_can_open,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -931,11 +937,12 @@ class ARCHIFORGE_OT_window(Operator):
                 sill_height = self.sill_height,
             )
             if result['wall']:
-                self.report({'INFO'}, f"Window → boolean en '{result['wall'].name}'")
+                self.report({'INFO'}, _tr("Window → boolean en '{}'")
+                                      .format(result['wall'].name))
             else:
-                self.report({'INFO'}, "Window created (no wall nearby)")
+                self.report({'INFO'}, _tr("Window created (no wall nearby)"))
         else:
-            self.report({'INFO'}, f"Window created: {obj.name}")
+            self.report({'INFO'}, _tr("Window created: {}").format(obj.name))
 
         return {'FINISHED'}
 
@@ -958,7 +965,7 @@ class ARCHIFORGE_OT_window_place(Operator):
 
     def invoke(self, context, event):
         context.window_manager.modal_handler_add(self)
-        self.report({'INFO'}, "Click on a wall to place the window (ESC to cancel)")
+        self.report({'INFO'}, _tr("Click on a wall to place the window (ESC to cancel)"))
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
@@ -968,7 +975,7 @@ class ARCHIFORGE_OT_window_place(Operator):
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             hit = self._raycast_wall(context, event)
             if hit is None:
-                self.report({'WARNING'}, "Click on a wall surface")
+                self.report({'WARNING'}, _tr("Click on a wall surface"))
                 return {'RUNNING_MODAL'}
             wall_obj, hit_loc, hit_normal = hit
             self._create_window_at(context, wall_obj, hit_loc, hit_normal)
@@ -1035,7 +1042,7 @@ class ARCHIFORGE_OT_window_place(Operator):
             sill_height = self.sill_height,
             wall_obj    = wall_obj,
         )
-        self.report({'INFO'}, f"Window placed on '{wall_obj.name}'")
+        self.report({'INFO'}, _tr("Window placed on '{}'").format(wall_obj.name))
 
 
 class ARCHIFORGE_OT_window_update(Operator):
@@ -1056,7 +1063,7 @@ class ARCHIFORGE_OT_window_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_window_mesh(obj, obj.archiforge_window)
-        self.report({'INFO'}, "Window updated")
+        self.report({'INFO'}, _tr("Window updated"))
         return {'FINISHED'}
 
 
@@ -1111,9 +1118,9 @@ class ARCHIFORGE_OT_window_apply_boolean(Operator):
         )
         if result['success']:
             wn = result['wall'].name if result['wall'] else "none"
-            self.report({'INFO'}, f"✅ Boolean applied to '{wn}'")
+            self.report({'INFO'}, _tr("✅ Boolean applied to '{}'").format(wn))
         else:
-            self.report({'WARNING'}, "⚠️  Could not apply boolean")
+            self.report({'WARNING'}, _tr("⚠️  Could not apply boolean"))
         return {'FINISHED'}
 
 

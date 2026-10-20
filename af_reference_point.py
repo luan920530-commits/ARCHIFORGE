@@ -33,6 +33,12 @@ from bpy.props  import (
     EnumProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -207,7 +213,7 @@ class ARCHIFORGE_OT_rp_create(Operator):
         settings = context.scene.af_reference_point
         settings.active_rp_name = obj.name
 
-        self.report({'INFO'}, f"Reference point '{self.label}' created")
+        self.report({'INFO'}, _tr("Reference point '{}' created").format(self.label))
         return {'FINISHED'}
 
 
@@ -231,7 +237,7 @@ class ARCHIFORGE_OT_rp_set_active(Operator):
     def execute(self, context):
         obj = context.active_object
         context.scene.af_reference_point.active_rp_name = obj.name
-        self.report({'INFO'}, f"Active RP: '{obj.af_rp_props.rp_label}'")
+        self.report({'INFO'}, _tr("Active RP: '{}'").format(obj.af_rp_props.rp_label))
         return {'FINISHED'}
 
 
@@ -245,10 +251,10 @@ class ARCHIFORGE_OT_rp_go_to(Operator):
     def execute(self, context):
         rp = get_active_rp(context)
         if rp is None:
-            self.report({'WARNING'}, "No active reference point")
+            self.report({'WARNING'}, _tr("No active reference point"))
             return {'CANCELLED'}
         context.scene.cursor.location = rp.location.copy()
-        self.report({'INFO'}, f"Cursor → {rp.name}")
+        self.report({'INFO'}, _tr("Cursor → {}").format(rp.name))
         return {'FINISHED'}
 
 
@@ -262,14 +268,14 @@ class ARCHIFORGE_OT_rp_center_view(Operator):
     def execute(self, context):
         rp = get_active_rp(context)
         if rp is None:
-            self.report({'WARNING'}, "No active reference point")
+            self.report({'WARNING'}, _tr("No active reference point"))
             return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
         rp.select_set(True)
         context.view_layer.objects.active = rp
         bpy.ops.view3d.view_selected()
-        self.report({'INFO'}, f"View centered on: {rp.name}")
+        self.report({'INFO'}, _tr("View centered on: {}").format(rp.name))
         return {'FINISHED'}
 
 
@@ -301,7 +307,7 @@ class ARCHIFORGE_OT_rp_move_project(Operator):
     def execute(self, context):
         rp = get_active_rp(context)
         if rp is None:
-            self.report({'WARNING'}, "No active reference point")
+            self.report({'WARNING'}, _tr("No active reference point"))
             return {'CANCELLED'}
 
         delta_v = Vector(self.delta)
@@ -316,7 +322,7 @@ class ARCHIFORGE_OT_rp_move_project(Operator):
 
         self.report(
             {'INFO'},
-            f"Project moved by {tuple(round(v,3) for v in self.delta)}"
+            _tr("Project moved by {}").format(tuple(round(v,3) for v in self.delta))
         )
         return {'FINISHED'}
 

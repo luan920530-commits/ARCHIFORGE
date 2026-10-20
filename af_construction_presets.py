@@ -51,9 +51,20 @@ TILE_FORMAT_PRESETS = (
 )
 
 WALL_PRESET_NOTE = (
-    "Reference thickness only: the wall stays a single solid with no bond "
-    "pattern or layers, and the value is not a code requirement."
+    "Reference thickness only: the wall stays a single solid without layers "
+    "(the brick or block bond is a procedural texture, not geometry), and "
+    "the value is not a code requirement."
 )
+
+# ArchiForge material assigned to the wall face when a preset is chosen.
+# The bond pattern of brick/block is a procedural texture on that single
+# solid, never geometry. CUSTOM keeps whatever material the wall has.
+WALL_PRESET_MATERIALS = {
+    'WOOD_FRAME': "AF.Wall.Plaster",
+    'BRICK': "AF.Wall.Brick",
+    'CONCRETE': "AF.Wall.Concrete",
+    'STRUCTURAL_BLOCK': "AF.Wall.Block",
+}
 TILE_PRESET_NOTE = (
     "Commercial reference format; edit the size freely afterwards."
 )
@@ -73,6 +84,11 @@ def wall_preset_thickness(preset_id):
         if identifier == preset_id:
             return thickness
     return None
+
+
+def wall_preset_material(preset_id):
+    """Catalogue material for a wall preset, ``None`` for ``CUSTOM``/unknown."""
+    return WALL_PRESET_MATERIALS.get(preset_id)
 
 
 def wall_preset_items():

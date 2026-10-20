@@ -31,6 +31,12 @@ from bpy.props  import (
     PointerProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -198,7 +204,7 @@ class ARCHIFORGE_OT_snap_toggle(Operator):
         if snap:
             snap.enabled = not snap.enabled
             state = "ON" if snap.enabled else "OFF"
-            self.report({'INFO'}, f"AF Snap: {state}")
+            self.report({'INFO'}, _tr("AF Snap: {}").format(state))
         return {'FINISHED'}
 
 
@@ -219,7 +225,7 @@ class ARCHIFORGE_OT_snap_set_grid(Operator):
             snap.grid_size = self.grid_size
             self.report(
                 {'INFO'},
-                f"AF Snap grid: {self.grid_size * 100:.1f} cm"
+                _tr("AF Snap grid: {:.1f} cm").format(self.grid_size * 100)
             )
         return {'FINISHED'}
 
@@ -253,7 +259,7 @@ class ARCHIFORGE_OT_snap_sync_blender(Operator):
                     if space.type == 'VIEW_3D':
                         space.overlay.grid_scale = grid
 
-        self.report({'INFO'}, "Snap synchronized with Blender")
+        self.report({'INFO'}, _tr("Snap synchronized with Blender"))
         return {'FINISHED'}
 
 

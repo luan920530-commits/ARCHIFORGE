@@ -138,7 +138,7 @@ class ARCHIFORGE_OT_control_center(Operator):
             "af_openings", "AF_OPEN_TYPES",
             {'DOOR_SINGLE', 'WIN_SLIDING'})
         a['stair'] = _available_ids(
-            "af_stairs", "AF_STAIR_TYPES",
+            "af_stair", "AF_STAIR_TYPES",
             {'STRAIGHT', 'RAMP'})
         a['struct'] = _available_ids(
             "af_structure", "AF_STRUCT_TYPES",
@@ -342,14 +342,14 @@ class ARCHIFORGE_OT_control_center(Operator):
                 "archiforge.stair_preset_menu", text="Stairs…",
                 **_icon_kw(icons, "stair", 'EXPORT')
             ).preset_operator = "archiforge.stair"
-        if _op_exists("archiforge.stairs"):
+        if _op_exists("archiforge.stair"):
             for tid, txt in (('STRAIGHT', "Straight"),
                              ('L_SHAPED', "L-Shape"),
                              ('SPIRAL', "Spiral"),
                              ('RAMP', "Ramp 8%")):
                 if tid in av['stair']:
                     row.operator(
-                        "archiforge.stairs", text=txt,
+                        "archiforge.stair", text=txt,
                         **_icon_kw(icons, "stair", 'ADD')).item_type = tid
 
     # ═══════════════════════════════════════════════════════

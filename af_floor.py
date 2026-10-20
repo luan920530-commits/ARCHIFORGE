@@ -81,6 +81,12 @@ from .af_floor_geometry import (
 )
 from .af_outline_draw import AF_OutlineDrawMixin
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1690,7 +1696,7 @@ class ARCHIFORGE_OT_floor(Operator):
         props.tile_depth = tile_d
         props.tile_preset = self.tile_preset
         _rebuild_floor_mesh(obj, props)
-        self.report({'INFO'}, f"Floor created: {obj.name}")
+        self.report({'INFO'}, _tr("Floor created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1716,29 +1722,44 @@ class ARCHIFORGE_OT_floor_draw(AF_OutlineDrawMixin, Operator):
     )
 
     def _create_from_outline(self, context, points):
-        global _FLOOR_UPDATE_SUSPENDED
-        obj = None
-        previous_suspend = _FLOOR_UPDATE_SUSPENDED
-        _FLOOR_UPDATE_SUSPENDED = True
-        try:
-            obj, props = _create_floor_object(context, "AF_Floor")
-            origin, _, _ = _set_floor_outline(props, points)
-            obj.location = (origin[0], origin[1], self._draw_z)
-            props.pattern = self.pattern
-            props.tile_width = self.tile_width
-            props.tile_depth = self.tile_depth
-            props.source_curve = ""
-            _rebuild_floor_mesh(obj, props)
-            return obj
-        except Exception:
-            if obj is not None and obj.name in bpy.data.objects:
-                mesh = obj.data if obj.type == 'MESH' else None
-                bpy.data.objects.remove(obj, do_unlink=True)
-                if mesh is not None and mesh.users == 0:
-                    bpy.data.meshes.remove(mesh)
-            raise
-        finally:
-            _FLOOR_UPDATE_SUSPENDED = previous_suspend
+        return create_floor_from_outline(
+            context, points, z=self._draw_z, pattern=self.pattern,
+            tile_width=self.tile_width, tile_depth=self.tile_depth)
+
+
+def create_floor_from_outline(context, points, z=0.0, pattern='REGULAR',
+                              tile_width=0.60, tile_depth=0.60,
+                              tile_preset=CUSTOM_PRESET, name="AF_Floor"):
+    """Create a floor from a closed XY outline (world coordinates).
+
+    Shared by the viewport draw tool and the combined sets. Raises
+    ``ValueError`` for an invalid outline and removes the object if the
+    mesh rebuild fails.
+    """
+    global _FLOOR_UPDATE_SUSPENDED
+    obj = None
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        obj, props = _create_floor_object(context, name)
+        origin, _, _ = _set_floor_outline(props, points)
+        obj.location = (origin[0], origin[1], float(z))
+        props.pattern = pattern
+        props.tile_width = tile_width
+        props.tile_depth = tile_depth
+        props.tile_preset = tile_preset
+        props.source_curve = ""
+        _rebuild_floor_mesh(obj, props)
+        return obj
+    except Exception:
+        if obj is not None and obj.name in bpy.data.objects:
+            mesh = obj.data if obj.type == 'MESH' else None
+            bpy.data.objects.remove(obj, do_unlink=True)
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        raise
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
 
 
 class ARCHIFORGE_OT_floor_update(Operator):
@@ -1758,7 +1779,7 @@ class ARCHIFORGE_OT_floor_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_floor_mesh(obj, obj.archiforge_floor)
-        self.report({'INFO'}, "Floor updated")
+        self.report({'INFO'}, _tr("Floor updated"))
         return {'FINISHED'}
 
 
@@ -1809,7 +1830,7 @@ class ARCHIFORGE_OT_floor_from_wall(Operator):
         props.tile_depth = self.tile_width
         obj.location     = Vector((min(xs), min(ys), 0.0))
         _rebuild_floor_mesh(obj, props)
-        self.report({'INFO'}, f"Floor from wall '{wall.name}'")
+        self.report({'INFO'}, _tr("Floor from wall '{}'").format(wall.name))
         return {'FINISHED'}
 
 
@@ -1845,7 +1866,7 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
         global _FLOOR_UPDATE_SUSPENDED
         curve = context.active_object
         if not curve.data.splines:
-            self.report({'ERROR'}, "The curve has no outline spline")
+            self.report({'ERROR'}, _tr("The curve has no outline spline"))
             return {'CANCELLED'}
 
         spline = curve.data.splines[0]
@@ -1857,7 +1878,7 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
             points = [curve.matrix_world @ Vector(point.co[:3])
                       for point in spline.points]
         if len(points) < 3:
-            self.report({'ERROR'}, "Curve outline needs at least 3 points")
+            self.report({'ERROR'}, _tr("Curve outline needs at least 3 points"))
             return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
@@ -1879,7 +1900,7 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
                 bpy.data.objects.remove(obj, do_unlink=True)
                 if mesh.users == 0:
                     bpy.data.meshes.remove(mesh)
-            self.report({'ERROR'}, str(exc))
+            self.report({'ERROR'}, _tr(str(exc)))
             return {'CANCELLED'}
         except Exception:
             if obj is not None:
@@ -1891,7 +1912,7 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
         finally:
             _FLOOR_UPDATE_SUSPENDED = previous_suspend
 
-        self.report({'INFO'}, f"Floor from curve '{curve.name}'")
+        self.report({'INFO'}, _tr("Floor from curve '{}'").format(curve.name))
         return {'FINISHED'}
 
 

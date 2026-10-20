@@ -26,6 +26,12 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_FURN_PROP = "archiforge_furniture"
 AF_FURN_VERSION = 1
@@ -1000,7 +1006,7 @@ class ARCHIFORGE_OT_furniture(Operator):
         finally:
             _SUSPEND = False
         _rebuild_furniture_mesh(obj, props)
-        self.report({'INFO'}, f"Furniture created: {obj.name}")
+        self.report({'INFO'}, _tr("Furniture created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1020,7 +1026,7 @@ class ARCHIFORGE_OT_furniture_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_furniture_mesh(obj, obj.archiforge_furniture)
-        self.report({'INFO'}, "Furniture updated")
+        self.report({'INFO'}, _tr("Furniture updated"))
         return {'FINISHED'}
 
 
@@ -1042,7 +1048,7 @@ class ARCHIFORGE_OT_furniture_reset(Operator):
         props = obj.archiforge_furniture
         _apply_type_defaults(props, props.item_type)
         _rebuild_furniture_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 

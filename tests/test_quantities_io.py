@@ -165,6 +165,39 @@ class QuantityCollectionTests(unittest.TestCase):
         self.assertIn("pendiente=8,00%", rows[0][5])
 
 
+    def test_imperial_unit_system_converts_quantities_and_labels(self):
+        wall_props = SimpleNamespace(
+            is_af_wall=True,
+            object_name="AF_Wall",
+            height=3.048,
+            width=0.3048,
+            parts=[SimpleNamespace(length=3.048, enabled=True)],
+        )
+        wall = SimpleNamespace(name="AF_Wall", archiforge_wall=wall_props)
+
+        rows = collect_quantities([wall], unit_system='IMPERIAL')
+
+        self.assertEqual([row[4] for row in rows], ["ft2", "ft3"])
+        self.assertAlmostEqual(rows[0][3], 100.0, places=6)
+        self.assertAlmostEqual(rows[1][3], 100.0, places=6)
+        self.assertIn("L=10,00", rows[0][5])
+        self.assertIn("e=1,00 ft", rows[0][5])
+
+        metric_rows = collect_quantities([wall])
+        self.assertEqual([row[4] for row in metric_rows], ["m2", "m3"])
+        self.assertAlmostEqual(metric_rows[0][3], 3.048 ** 2)
+
+    def test_unknown_unit_system_falls_back_to_metric(self):
+        wall_props = SimpleNamespace(
+            is_af_wall=True, object_name="AF_Wall", height=2.0, width=0.2,
+            parts=[SimpleNamespace(length=5.0, enabled=True)],
+        )
+        wall = SimpleNamespace(name="AF_Wall", archiforge_wall=wall_props)
+        rows = collect_quantities([wall], unit_system='CUBITS')
+        self.assertEqual(rows[0][4], "m2")
+        self.assertAlmostEqual(rows[0][3], 10.0)
+
+
 class CsvExportTests(unittest.TestCase):
     def test_number_format_is_spanish_and_rejects_non_finite_values(self):
         self.assertEqual(format_number(1234.567), "1234,57")

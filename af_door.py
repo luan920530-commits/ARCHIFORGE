@@ -54,6 +54,12 @@ from bpy.props import (
 from . import af_autoboolean
 from . import af_material
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -781,11 +787,12 @@ class ARCHIFORGE_OT_door(Operator):
                 height      = self.height,
             )
             if result['wall']:
-                self.report({'INFO'}, f"Door → boolean en '{result['wall'].name}'")
+                self.report({'INFO'}, _tr("Door → boolean en '{}'")
+                                      .format(result['wall'].name))
             else:
-                self.report({'INFO'}, "Door created (no wall found)")
+                self.report({'INFO'}, _tr("Door created (no wall found)"))
         else:
-            self.report({'INFO'}, f"Door created: {obj.name}")
+            self.report({'INFO'}, _tr("Door created: {}").format(obj.name))
 
         return {'FINISHED'}
 
@@ -814,18 +821,18 @@ class ARCHIFORGE_OT_door_place(Operator):
 
     def invoke(self, context, event):
         context.window_manager.modal_handler_add(self)
-        self.report({'INFO'}, "Click on a wall to place the door (ESC to cancel)")
+        self.report({'INFO'}, _tr("Click on a wall to place the door (ESC to cancel)"))
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         if event.type in {'ESC', 'RIGHTMOUSE'}:
-            self.report({'INFO'}, "Placement cancelled")
+            self.report({'INFO'}, _tr("Placement cancelled"))
             return {'CANCELLED'}
 
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             hit = self._raycast_wall(context, event)
             if hit is None:
-                self.report({'WARNING'}, "Click on a wall surface")
+                self.report({'WARNING'}, _tr("Click on a wall surface"))
                 return {'RUNNING_MODAL'}
 
             wall_obj, hit_loc, hit_normal = hit
@@ -911,9 +918,9 @@ class ARCHIFORGE_OT_door_place(Operator):
         )
 
         if result['wall']:
-            self.report({'INFO'}, f"Door placed on '{wall_obj.name}'")
+            self.report({'INFO'}, _tr("Door placed on '{}'").format(wall_obj.name))
         else:
-            self.report({'INFO'}, "Door placed (boolean failed)")
+            self.report({'INFO'}, _tr("Door placed (boolean failed)"))
 
 
 class ARCHIFORGE_OT_door_update(Operator):
@@ -935,7 +942,7 @@ class ARCHIFORGE_OT_door_update(Operator):
         obj   = context.active_object
         props = obj.archiforge_door
         _rebuild_door_mesh(obj, props)
-        self.report({'INFO'}, "Door updated")
+        self.report({'INFO'}, _tr("Door updated"))
         return {'FINISHED'}
 
 
@@ -1013,9 +1020,9 @@ class ARCHIFORGE_OT_door_apply_boolean(Operator):
 
         if result['success']:
             wall_name = result['wall'].name if result['wall'] else "none"
-            self.report({'INFO'}, f"✅ Boolean applied to '{wall_name}'")
+            self.report({'INFO'}, _tr("✅ Boolean applied to '{}'").format(wall_name))
         else:
-            self.report({'WARNING'}, "⚠️  Could not apply boolean")
+            self.report({'WARNING'}, _tr("⚠️  Could not apply boolean"))
 
         return {'FINISHED'}
 

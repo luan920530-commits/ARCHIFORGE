@@ -4,12 +4,19 @@
 v1.0 — Blender 3.3 LTS.
 Regla confort: 2R + T = 64 cm (auto). Baranda h=90 cm.
 Origen en piso al arranque, ascenso hacia +Y (recta/L), rampa igual.
+
+Hasta 1.11 existía una copia idéntica (``af_stairs.py``) que registraba
+``archiforge.stairs`` y la propiedad ``archiforge_stairs``; desde 1.12 este
+módulo es el único. ``archiforge.stairs`` se mantiene como alias y los
+objetos guardados con la propiedad antigua se migran al abrir el archivo
+(:func:`migrate_legacy_stairs`).
 """
 
 import bpy
 import math
 
 from mathutils import Euler, Matrix, Vector
+from bpy.app.handlers import persistent
 from bpy.types import Operator, Panel, PropertyGroup
 from bpy.props import (
     BoolProperty,
@@ -27,7 +34,16 @@ except ImportError:
     af_material = None
     AF_ObjectBuilder = None
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 AF_STAIR_PROP = "archiforge_stair"
+# Nombre de la propiedad del módulo duplicado eliminado en 1.12; los
+# archivos antiguos la conservan como ID property hasta migrarla.
+AF_LEGACY_STAIR_PROP = "archiforge_stairs"
 AF_STAIR_VERSION = 1
 
 AF_STAIR_TYPES = [
@@ -55,22 +71,17 @@ _SUSPEND = False
 def af_stair_update(self, context):
     if _SUSPEND:
         return
-    try:
-        from .af_stairs import _find_stair_object as _find
-        from .af_stairs import _rebuild_stair_mesh as _rb
-    except ImportError:
-        return
     props = self if hasattr(self, "is_af_stair") else None
     if props is None:
         return
-    obj = _find(props)
+    obj = _find_stair_object(props)
     if obj is None:
         obj = context.active_object if context else None
     if obj is None or obj.type != 'MESH':
         return
     if not getattr(obj, AF_STAIR_PROP, None):
         return
-    _rb(obj, props)
+    _rebuild_stair_mesh(obj, props)
 
 
 def stair_code_calc(total_rise):
@@ -530,11 +541,8 @@ def _create_stair_object(context, name="AF_Stair"):
     return obj, props
 
 
-class ARCHIFORGE_OT_stair(Operator):
-    bl_idname = "archiforge.stair"
-    bl_label = "Add AF Stair"
-    bl_description = "Add a parametric ArchiForge stair/ramp"
-    bl_options = {'REGISTER', 'UNDO'}
+class _StairCreateMixin:
+    """Propiedades y flujo compartidos por ``archiforge.stair`` y su alias."""
 
     item_type : EnumProperty(name="Type", items=AF_STAIR_TYPES,
                              default='STRAIGHT')
@@ -567,8 +575,87 @@ class ARCHIFORGE_OT_stair(Operator):
         finally:
             _SUSPEND = False
         _rebuild_stair_mesh(obj, props)
-        self.report({'INFO'}, f"Stair created: {obj.name}")
+        self.report({'INFO'}, _tr("Stair created: {}").format(obj.name))
         return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_stair(_StairCreateMixin, Operator):
+    bl_idname = "archiforge.stair"
+    bl_label = "Add AF Stair"
+    bl_description = "Add a parametric ArchiForge stair/ramp"
+    bl_options = {'REGISTER', 'UNDO'}
+
+
+class ARCHIFORGE_OT_stairs(_StairCreateMixin, Operator):
+    """Alias de compatibilidad del módulo ``af_stairs`` (hasta 1.11)."""
+    bl_idname = "archiforge.stairs"
+    bl_label = "Add AF Stair"
+    bl_description = "Add a parametric ArchiForge stair/ramp"
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+
+
+def migrate_legacy_stairs(objects=None):
+    """Convierte objetos guardados con ``archiforge_stairs`` (módulo
+    duplicado hasta 1.11) a ``archiforge_stair``.
+
+    Ambos grupos tenían las mismas propiedades, así que los valores
+    crudos (ID properties) se copian uno a uno; después se regenera la
+    malla y se elimina la propiedad antigua. Devuelve los objetos
+    migrados.
+    """
+    global _SUSPEND
+    if objects is None:
+        try:
+            objects = list(bpy.data.objects)
+        except Exception:  # noqa: BLE001 - bpy.data restringido
+            return []
+    migrated = []
+    for obj in objects:
+        if getattr(obj, "type", None) != 'MESH':
+            continue
+        try:
+            legacy = obj.get(AF_LEGACY_STAIR_PROP)
+        except Exception:  # noqa: BLE001
+            legacy = None
+        if legacy is None or not hasattr(obj, AF_STAIR_PROP):
+            continue
+        props = getattr(obj, AF_STAIR_PROP)
+        _SUSPEND = True
+        try:
+            for key in legacy.keys():
+                try:
+                    props[key] = legacy[key]
+                except Exception:  # noqa: BLE001 - clave desconocida
+                    continue
+            props.is_af_stair = True
+            props.object_name = obj.name
+            props.af_version = AF_STAIR_VERSION
+        finally:
+            _SUSPEND = False
+        try:
+            del obj[AF_LEGACY_STAIR_PROP]
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            _rebuild_stair_mesh(obj, props)
+        except Exception as err:  # noqa: BLE001
+            print("[ArchiForge] stair migration: rebuild failed for "
+                  "{}: {}".format(obj.name, err))
+        migrated.append(obj)
+    if migrated:
+        print("[ArchiForge] {} legacy stair object(s) migrated".format(
+            len(migrated)))
+    return migrated
+
+
+def _migrate_legacy_stairs_timer():
+    migrate_legacy_stairs()
+    return None  # un solo disparo
+
+
+@persistent
+def _on_load_post(_dummy=None):
+    migrate_legacy_stairs()
 
 
 class ARCHIFORGE_OT_stair_update(Operator):
@@ -587,7 +674,7 @@ class ARCHIFORGE_OT_stair_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_stair_mesh(obj, obj.archiforge_stair)
-        self.report({'INFO'}, "Stair updated")
+        self.report({'INFO'}, _tr("Stair updated"))
         return {'FINISHED'}
 
 
@@ -683,6 +770,7 @@ class ARCHIFORGE_PT_stair(Panel):
 classes = [
     AF_StairProperties,
     ARCHIFORGE_OT_stair,
+    ARCHIFORGE_OT_stairs,
     ARCHIFORGE_OT_stair_update,
     ARCHIFORGE_PT_stair,
 ]
@@ -696,12 +784,29 @@ def register():
         name="ArchiForge Stair",
         description="ArchiForge stair properties",
     )
-    print("[ArchiForge] af_stairs v1 - registered")
+    # Migrar escaleras del módulo duplicado: al abrir archivos y una vez
+    # tras activar el addon (bpy.data no es accesible dentro de register).
+    try:
+        if _on_load_post not in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.append(_on_load_post)
+        bpy.app.timers.register(_migrate_legacy_stairs_timer,
+                                first_interval=0.5)
+    except Exception as err:  # noqa: BLE001
+        print("[ArchiForge] stair migration hooks unavailable: "
+              "{}".format(err))
+    print("[ArchiForge] af_stair v1 - registered")
 
 
 def unregister():
+    try:
+        if _on_load_post in bpy.app.handlers.load_post:
+            bpy.app.handlers.load_post.remove(_on_load_post)
+        if bpy.app.timers.is_registered(_migrate_legacy_stairs_timer):
+            bpy.app.timers.unregister(_migrate_legacy_stairs_timer)
+    except Exception:  # noqa: BLE001
+        pass
     if hasattr(bpy.types.Object, "archiforge_stair"):
         del bpy.types.Object.archiforge_stair
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    print("[ArchiForge] af_stairs - unregistered")
+    print("[ArchiForge] af_stair - unregistered")

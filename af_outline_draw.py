@@ -10,6 +10,12 @@ try:
 except ImportError:
     from af_wall_path import build_wall_segments
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 _MAX_OUTLINE_POINTS = 64
 _CLOSE_DISTANCE_PIXELS = 12.0
@@ -84,7 +90,7 @@ class AF_OutlineDrawMixin:
             context.window_manager.modal_handler_add(self)
         except Exception as exc:
             self._remove_outline_draw_handler()
-            self.report({'ERROR'}, f"No se pudo iniciar el dibujo: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo iniciar el dibujo: {}").format(exc))
             return {'CANCELLED'}
 
         if context.area is not None:
@@ -226,18 +232,19 @@ class AF_OutlineDrawMixin:
                 max_segments=_MAX_OUTLINE_POINTS,
             )
         except ValueError as exc:
-            self.report({'WARNING'}, str(exc))
+            self.report({'WARNING'}, _tr(str(exc)))
             return {'RUNNING_MODAL'}
 
         try:
             obj = self._create_from_outline(context, list(self._draw_points))
         except Exception as exc:
-            self.report({'ERROR'}, f"No se pudo crear el contorno: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo crear el contorno: {}").format(exc))
             self._remove_outline_draw_handler()
             return {'CANCELLED'}
 
         self._remove_outline_draw_handler()
-        self.report({'INFO'}, f"{self.outline_tool_label} creado: {obj.name}")
+        self.report({'INFO'}, _tr("{} creado: {}")
+                              .format(self.outline_tool_label, obj.name))
         return {'FINISHED'}
 
     def modal(self, context, event):
@@ -269,7 +276,7 @@ class AF_OutlineDrawMixin:
             point = _mouse_world_point(context, event, self._draw_z)
             if point is None:
                 self.report({'WARNING'},
-                            "No se pudo intersectar el cursor con el plano de dibujo")
+                            _tr("No se pudo intersectar el cursor con el plano de dibujo"))
                 return {'RUNNING_MODAL'}
             point = self._snap_draw_point(context, point)
             if (self._draw_points
@@ -277,7 +284,7 @@ class AF_OutlineDrawMixin:
                     < _MIN_SEGMENT_LENGTH):
                 return {'RUNNING_MODAL'}
             if len(self._draw_points) >= _MAX_OUTLINE_POINTS:
-                self.report({'WARNING'}, "Máximo de 64 vértices alcanzado")
+                self.report({'WARNING'}, _tr("Máximo de 64 vértices alcanzado"))
                 return {'RUNNING_MODAL'}
             self._draw_points.append(point)
             self._draw_hover = point.copy()

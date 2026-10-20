@@ -27,6 +27,12 @@ except ImportError:
     af_material = None
     AF_ObjectBuilder = None
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 AF_OPEN_PROP = "archiforge_opening"
 AF_OPEN_VERSION = 1
 
@@ -783,7 +789,7 @@ class ARCHIFORGE_OT_opening(Operator):
             _SUSPEND = previous_suspend
         _rebuild_opening_mesh(obj, props)
         _apply_wall_cut(obj, props)
-        self.report({'INFO'}, f"Opening created: {obj.name}")
+        self.report({'INFO'}, _tr("Opening created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -804,7 +810,7 @@ class ARCHIFORGE_OT_opening_update(Operator):
         obj = context.active_object
         _rebuild_opening_mesh(obj, obj.archiforge_opening)
         _apply_wall_cut(obj, obj.archiforge_opening)
-        self.report({'INFO'}, "Opening updated")
+        self.report({'INFO'}, _tr("Opening updated"))
         return {'FINISHED'}
 
 
@@ -827,7 +833,7 @@ class ARCHIFORGE_OT_opening_reset(Operator):
         _apply_type_defaults(props, props.item_type)
         _rebuild_opening_mesh(obj, props)
         _apply_wall_cut(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 

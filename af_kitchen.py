@@ -25,6 +25,12 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_KIT_PROP = "archiforge_kitchen"
 AF_KIT_VERSION = 1
@@ -758,7 +764,7 @@ class ARCHIFORGE_OT_kitchen(Operator):
         finally:
             _SUSPEND = False
         _rebuild_kitchen_mesh(obj, props)
-        self.report({'INFO'}, f"Kitchen item created: {obj.name}")
+        self.report({'INFO'}, _tr("Kitchen item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -778,7 +784,7 @@ class ARCHIFORGE_OT_kitchen_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_kitchen_mesh(obj, obj.archiforge_kitchen)
-        self.report({'INFO'}, "Kitchen item updated")
+        self.report({'INFO'}, _tr("Kitchen item updated"))
         return {'FINISHED'}
 
 
@@ -800,7 +806,7 @@ class ARCHIFORGE_OT_kitchen_reset(Operator):
         props = obj.archiforge_kitchen
         _apply_type_defaults(props, props.item_type)
         _rebuild_kitchen_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 

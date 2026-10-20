@@ -60,6 +60,7 @@ BLENDER_TRANSLATION_FLAGS = ("use_translate_interface", "use_translate_tooltips"
 
 _messages_cache = {}
 _registered_name = None
+_active_language = None   # set by apply_language(); None → read preferences
 
 
 # ════════════════════════════════════════════════════════════
@@ -89,6 +90,34 @@ def tr(text, language):
     if not text:
         return text
     return messages(language).get(text, text)
+
+
+def _addon_name():
+    """Top-level package name, which is also the key in preferences.addons."""
+    return (__package__ or "ArchiForge").split(".")[0]
+
+
+def active_language():
+    """Language applied by :func:`apply_language`, else the preference."""
+    if _active_language in LANGUAGES:
+        return _active_language
+    if bpy is None:
+        return DEFAULT_LANGUAGE
+    return current_language(_addon_name())
+
+
+def tr_report(text):
+    """Translate an operator report / status message on the fly.
+
+    Blender does not translate ``Operator.report`` messages in 3.3, so
+    operators pass their text through this helper. Unknown strings pass
+    through unchanged; use ``str.format`` placeholders in the template and
+    format after translating: ``_tr("Created {}").format(name)``.
+    """
+    try:
+        return tr(text, active_language())
+    except Exception:  # noqa: BLE001 - never break an operator for a message
+        return text
 
 
 def translation_table(language):
@@ -196,7 +225,8 @@ def _redraw_all():
 
 def release(addon_name, restore_flags=True):
     """Unregister the addon catalogue (safe to call when not registered)."""
-    global _registered_name
+    global _registered_name, _active_language
+    _active_language = None
     if bpy is None:
         return
     try:
@@ -215,12 +245,13 @@ def apply_language(language, addon_name):
     register a table (English mode translates the Spanish-written
     catalogue), so the Blender translation flags are enabled in both.
     """
-    global _registered_name
+    global _registered_name, _active_language
     if bpy is None:
         return False
     if language not in LANGUAGES:
         language = DEFAULT_LANGUAGE
     release(addon_name, restore_flags=False)
+    _active_language = language
     locale = getattr(bpy.app.translations, "locale", "") or "en_US"
     try:
         bpy.app.translations.register(

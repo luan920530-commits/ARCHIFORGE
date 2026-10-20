@@ -38,6 +38,12 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_BATH_PROP = "archiforge_bathroom"
 AF_BATH_VERSION = 2
@@ -1313,7 +1319,7 @@ class ARCHIFORGE_OT_bathroom(Operator):
         finally:
             _SUSPEND = False
         _rebuild_bathroom_mesh(obj, props)
-        self.report({'INFO'}, f"Bathroom item created: {obj.name}")
+        self.report({'INFO'}, _tr("Bathroom item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1333,7 +1339,7 @@ class ARCHIFORGE_OT_bathroom_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_bathroom_mesh(obj, obj.archiforge_bathroom)
-        self.report({'INFO'}, "Bathroom item updated")
+        self.report({'INFO'}, _tr("Bathroom item updated"))
         return {'FINISHED'}
 
 
@@ -1355,7 +1361,7 @@ class ARCHIFORGE_OT_bathroom_reset(Operator):
         props = obj.archiforge_bathroom
         _apply_type_defaults(props, props.item_type)
         _rebuild_bathroom_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset to defaults")
+        self.report({'INFO'}, _tr("Dimensions reset to defaults"))
         return {'FINISHED'}
 
 

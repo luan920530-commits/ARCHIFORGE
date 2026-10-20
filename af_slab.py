@@ -53,6 +53,12 @@ from . import af_material
 from .af_floor_geometry import normalize_outline
 from .af_outline_draw import AF_OutlineDrawMixin
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1047,7 +1053,7 @@ class ARCHIFORGE_OT_slab(Operator):
         props.z_offset  = self.z_offset
         props.is_ceiling = (self.slab_use == 'CEILING')
         _rebuild_slab_mesh(obj, props)
-        self.report({'INFO'}, f"Slab created: {obj.name}")
+        self.report({'INFO'}, _tr("Slab created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1124,7 +1130,7 @@ class ARCHIFORGE_OT_slab_from_curve(Operator):
         curve = context.active_object
         pts = _points_from_curve(curve)
         if len(pts) < 3:
-            self.report({'ERROR'}, "Curve needs at least 3 points")
+            self.report({'ERROR'}, _tr("Curve needs at least 3 points"))
             return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
@@ -1137,7 +1143,7 @@ class ARCHIFORGE_OT_slab_from_curve(Operator):
         props.is_ceiling = (self.slab_use == 'CEILING')
         _fill_vertices_from_points(props, pts)
         _rebuild_slab_mesh(obj, props)
-        self.report({'INFO'}, f"Slab from curve '{curve.name}'")
+        self.report({'INFO'}, _tr("Slab from curve '{}'").format(curve.name))
         return {'FINISHED'}
 
 
@@ -1178,7 +1184,7 @@ class ARCHIFORGE_OT_slab_from_wall(Operator):
         wprops = wall.archiforge_wall
         pts = _points_from_wall(wall)
         if len(pts) < 3:
-            self.report({'ERROR'}, "Could not read wall outline")
+            self.report({'ERROR'}, _tr("Could not read wall outline"))
             return {'CANCELLED'}
 
         z_off = wprops.height if self.ceiling else 0.0
@@ -1201,7 +1207,8 @@ class ARCHIFORGE_OT_slab_from_wall(Operator):
 
         self.report(
             {'INFO'},
-            f"{'Ceiling' if self.ceiling else 'Floor'} slab from '{wall.name}'"
+            _tr("{} slab from '{}'")
+            .format('Ceiling' if self.ceiling else 'Floor', wall.name)
         )
         return {'FINISHED'}
 
@@ -1237,9 +1244,9 @@ class ARCHIFORGE_OT_wall_from_slab(Operator):
                 width=self.width,
                 length=context.active_object.archiforge_slab.width,
             )
-            self.report({'INFO'}, "Wall created from slab dimensions")
+            self.report({'INFO'}, _tr("Wall created from slab dimensions"))
         except Exception as e:
-            self.report({'WARNING'}, f"Could not create wall: {e}")
+            self.report({'WARNING'}, _tr("Could not create wall: {}").format(e))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -1261,7 +1268,7 @@ class ARCHIFORGE_OT_slab_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_slab_mesh(obj, obj.archiforge_slab)
-        self.report({'INFO'}, "Slab updated")
+        self.report({'INFO'}, _tr("Slab updated"))
         return {'FINISHED'}
 
 

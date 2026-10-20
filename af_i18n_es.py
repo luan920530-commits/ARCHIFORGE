@@ -1839,8 +1839,8 @@ TRANSLATIONS = {
     "Is ArchiForge Wall": "Es muro ArchiForge",
     "Options": "Opciones",
     "Reference": "Referencia",
-    "Reference thickness, editable - single solid, no bond or layers":
-        "Espesor de referencia, editable - sólido único, sin aparejo ni capas",
+    "Reference thickness, editable - single solid, bond is a texture, no layers":
+        "Espesor de referencia, editable - sólido único, aparejo como textura, sin capas",
     "Top Height": "Altura superior",
     "Top Molding": "Moldura superior",
     "Top Molding Material": "Material de la moldura superior",
@@ -1967,14 +1967,14 @@ TRANSLATIONS = {
     # ── Enum items built at runtime (af_construction_presets.py) ──
     "Manual thickness": "Espesor manual",
     "Manual tile size": "Tamaño de baldosa manual",
-    "12 cm clay brick laid as a single wythe plus ~15 mm plaster per face - 0.15 m reference thickness (editable). Reference thickness only: the wall stays a single solid with no bond pattern or layers, and the value is not a code requirement.":
-        "Ladrillo de arcilla de 12 cm en una sola hilada más ~15 mm de pañete por cara - espesor de referencia 0.15 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin aparejo ni capas, y el valor no es una exigencia normativa.",
-    "20 cm hollow structural masonry block - 0.2 m reference thickness (editable). Reference thickness only: the wall stays a single solid with no bond pattern or layers, and the value is not a code requirement.":
-        "Bloque estructural hueco de 20 cm - espesor de referencia 0.2 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin aparejo ni capas, y el valor no es una exigencia normativa.",
-    "2x4 studs (89 mm) plus 12.7 mm boards on both faces - 0.115 m reference thickness (editable). Reference thickness only: the wall stays a single solid with no bond pattern or layers, and the value is not a code requirement.":
-        "Montantes 2x4 (89 mm) más tableros de 12.7 mm por ambas caras - espesor de referencia 0.115 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin aparejo ni capas, y el valor no es una exigencia normativa.",
-    "Cast-in-place reinforced concrete wall - 0.25 m reference thickness (editable). Reference thickness only: the wall stays a single solid with no bond pattern or layers, and the value is not a code requirement.":
-        "Muro de concreto reforzado vaciado en sitio - espesor de referencia 0.25 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin aparejo ni capas, y el valor no es una exigencia normativa.",
+    "12 cm clay brick laid as a single wythe plus ~15 mm plaster per face - 0.15 m reference thickness (editable). Reference thickness only: the wall stays a single solid without layers (the brick or block bond is a procedural texture, not geometry), and the value is not a code requirement.":
+        "Ladrillo de arcilla de 12 cm en una sola hilada más ~15 mm de pañete por cara - espesor de referencia 0.15 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin capas (el aparejo de ladrillo o bloque es una textura procedural, no geometría), y el valor no es una exigencia normativa.",
+    "20 cm hollow structural masonry block - 0.2 m reference thickness (editable). Reference thickness only: the wall stays a single solid without layers (the brick or block bond is a procedural texture, not geometry), and the value is not a code requirement.":
+        "Bloque estructural hueco de 20 cm - espesor de referencia 0.2 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin capas (el aparejo de ladrillo o bloque es una textura procedural, no geometría), y el valor no es una exigencia normativa.",
+    "2x4 studs (89 mm) plus 12.7 mm boards on both faces - 0.115 m reference thickness (editable). Reference thickness only: the wall stays a single solid without layers (the brick or block bond is a procedural texture, not geometry), and the value is not a code requirement.":
+        "Montantes 2x4 (89 mm) más tableros de 12.7 mm por ambas caras - espesor de referencia 0.115 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin capas (el aparejo de ladrillo o bloque es una textura procedural, no geometría), y el valor no es una exigencia normativa.",
+    "Cast-in-place reinforced concrete wall - 0.25 m reference thickness (editable). Reference thickness only: the wall stays a single solid without layers (the brick or block bond is a procedural texture, not geometry), and the value is not a code requirement.":
+        "Muro de concreto reforzado vaciado en sitio - espesor de referencia 0.25 m (editable). Solo es un espesor de referencia: el muro sigue siendo un sólido único sin capas (el aparejo de ladrillo o bloque es una textura procedural, no geometría), y el valor no es una exigencia normativa.",
     "Ceramic / porcelain floor tile 0.45 x 0.45 m. Commercial reference format; edit the size freely afterwards.":
         "Baldosa cerámica / porcelanato de piso 0.45 x 0.45 m. Formato comercial de referencia; edite el tamaño libremente después.",
     "Ceramic floor tile 0.3 x 0.3 m. Commercial reference format; edit the size freely afterwards.":
@@ -1995,6 +1995,242 @@ TRANSLATIONS = {
 
     # ── af_openings.py ──────────────────────────────────────
     "Sliding Door": "Puerta corrediza",
+    # ── operator reports (self.report) and unit system ──
+    "Unit system applied to {} scene(s)":
+        "Sistema de unidades aplicado a {} escena(s)",
+    "Unit system could not be applied":
+        "No se pudo aplicar el sistema de unidades",
+    "Apply Unit System to Scenes": "Aplicar sistema de unidades a las escenas",
+    "Apply to Scenes": "Aplicar a las escenas",
+    "Set the unit settings of every open scene to the ArchiForge unit system (metric or imperial)":
+        "Fijar las unidades de todas las escenas abiertas al sistema de unidades de ArchiForge (métrico o imperial)",
+    "The active scene uses another unit system":
+        "La escena activa usa otro sistema de unidades",
+    "Units shown by ArchiForge and used in the quantities CSV; applied to the unit settings of the open scenes":
+        "Unidades que muestra ArchiForge y usa el CSV de cantidades; se aplican a las unidades de las escenas abiertas",
+    " | {} error(s)": " | {} error(es)",
+    "AF Snap grid: {:.1f} cm": "Rejilla AF Snap: {:.1f} cm",
+    "Active object is not a {}": "El objeto activo no es un {}",
+    "All AF objects visible": "Todos los objetos AF visibles",
+    "ArchiForge Wall created: {}": "Muro ArchiForge creado: {}",
+    "Bathroom item created: {}": "Elemento de baño creado: {}",
+    "Bathroom item updated": "Elemento de baño actualizado",
+    "Built-in preset not found": "Preset integrado no encontrado",
+    "Camera set: {}": "Cámara configurada: {}",
+    "Cannot delete built-in presets":
+        "No se pueden borrar los presets integrados",
+    "Click on a wall surface": "Haga clic sobre la superficie de un muro",
+    "Click on a wall to place the door (ESC to cancel)":
+        "Haga clic en un muro para colocar la puerta (ESC para cancelar)",
+    "Click on a wall to place the window (ESC to cancel)":
+        "Haga clic en un muro para colocar la ventana (ESC para cancelar)",
+    "Could not create wall: {}": "No se pudo crear el muro: {}",
+    "Could not load preset: {}": "No se pudo cargar el preset: {}",
+    "Could not read wall outline": "No se pudo leer el contorno del muro",
+    "Curve needs at least 2 points": "La curva necesita al menos 2 puntos",
+    "Curve needs at least 3 points": "La curva necesita al menos 3 puntos",
+    "Curve outline needs at least 3 points":
+        "El contorno de la curva necesita al menos 3 puntos",
+    "Decor item created: {}": "Elemento de decoración creado: {}",
+    "Decor item updated": "Elemento de decoración actualizado",
+    "Deleted: {}": "Eliminado: {}",
+    "Dimensions reset to defaults":
+        "Dimensiones restablecidas a los valores por defecto",
+    "Dimensions reset": "Dimensiones restablecidas",
+    "Door created (no wall found)": "Puerta creada (no se encontró muro)",
+    "Door created: {}": "Puerta creada: {}",
+    "Door placed (boolean failed)": "Puerta colocada (falló el booleano)",
+    "Door updated": "Puerta actualizada",
+    "Electrical item created: {}": "Elemento eléctrico creado: {}",
+    "Electrical item updated": "Elemento eléctrico actualizado",
+    "Enter a preset name": "Escriba un nombre para el preset",
+    "Error loading library: {}": "Error al cargar la biblioteca: {}",
+    "Exported to: {}": "Exportado a: {}",
+    "Fence created: {}": "Cerca creada: {}",
+    "Fence updated": "Cerca actualizada",
+    "File must be a .blend file": "El archivo debe ser un .blend",
+    "File not found": "Archivo no encontrado",
+    "File not found: {}": "Archivo no encontrado: {}",
+    "Floor created: {}": "Piso creado: {}",
+    "Floor updated": "Piso actualizado",
+    "Furniture created: {}": "Mueble creado: {}",
+    "Furniture updated": "Mueble actualizado",
+    "Grid set to {:.3f}m": "Rejilla fijada en {:.3f} m",
+    "Import failed: {}": "Falló la importación: {}",
+    "Imported: {}": "Importado: {}",
+    "Isolating: {} objects": "Aislando: {} objetos",
+    "Kitchen item created: {}": "Elemento de cocina creado: {}",
+    "Kitchen item updated": "Elemento de cocina actualizado",
+    "Light removed/hidden": "Luz eliminada/oculta",
+    "Light synced": "Luz sincronizada",
+    "No AF camera found": "No se encontró una cámara AF",
+    "No AF objects found to frame": "No hay objetos AF para encuadrar",
+    "No active reference point": "No hay un punto de referencia activo",
+    "No file to export": "No hay archivo para exportar",
+    "No objects of this type found": "No se encontraron objetos de este tipo",
+    "No preset selected": "Ningún preset seleccionado",
+    "Opening created: {}": "Abertura creada: {}",
+    "Opening updated": "Abertura actualizada",
+    "Placement cancelled": "Colocación cancelada",
+    "Preset applied: {}": "Preset aplicado: {}",
+    "Preset saved: {}": "Preset guardado: {}",
+    "Presets reloaded": "Presets recargados",
+    "Project moved by {}": "Proyecto desplazado {}",
+    "Rebuilt {} object(s)": "{} objeto(s) regenerado(s)",
+    "Removed {} unused AF materials": "{} materiales AF sin uso eliminados",
+    "Render settings applied": "Ajustes de render aplicados",
+    "Render settings not available": "Ajustes de render no disponibles",
+    "Reset {} materials": "{} materiales restablecidos",
+    "Room asset rebuilt": "Objeto de ambiente regenerado",
+    "Selected {} ArchiForge object(s)":
+        "{} objeto(s) ArchiForge seleccionado(s)",
+    "Selected {} {} object(s)": "{} objeto(s) {} seleccionado(s)",
+    "Slab created: {}": "Losa creada: {}",
+    "Slab updated": "Losa actualizada",
+    "Snap synchronized with Blender": "Snap sincronizado con Blender",
+    "Stair created: {}": "Escalera creada: {}",
+    "Stair updated": "Escalera actualizada",
+    "Structure created: {}": "Estructura creada: {}",
+    "Structure updated": "Estructura actualizada",
+    "The curve has no outline spline":
+        "La curva no tiene una spline de contorno",
+    "Thumbnails regenerated (stub)": "Miniaturas regeneradas (provisional)",
+    "Truss created: {}": "Cercha creada: {}",
+    "Truss updated": "Cercha actualizada",
+    "View centered on: {}": "Vista centrada en: {}",
+    "Wall created from slab dimensions":
+        "Muro creado con las dimensiones de la losa",
+    "Wall updated": "Muro actualizado",
+    "Window created (no wall nearby)": "Ventana creada (sin muro cercano)",
+    "Window created: {}": "Ventana creada: {}",
+    "Window updated": "Ventana actualizada",
+    "{} cutters shown": "{} cortadores mostrados",
+    "{} cutters hidden": "{} cortadores ocultos",
+    "⚠️  Could not apply boolean": "⚠️  No se pudo aplicar el booleano",
+    "✅ Loaded {} AF materials from library":
+        "✅ {} materiales AF cargados de la biblioteca",
+    "✅ {} ArchiForge materials created/updated":
+        "✅ {} materiales ArchiForge creados/actualizados",
+    "Door placed on '{}'": "Puerta colocada en '{}'",
+    "✅ Boolean applied to '{}'": "✅ Booleano aplicado en '{}'",
+    "Fence from curve '{}'": "Cerca desde la curva '{}'",
+    "Floor from curve '{}'": "Piso desde la curva '{}'",
+    "Floor from wall '{}'": "Piso desde el muro '{}'",
+    "Assigned '{}' to slot {}": "'{}' asignado al slot {}",
+    "Could not create material '{}'": "No se pudo crear el material '{}'",
+    "Material '{}' not found": "Material '{}' no encontrado",
+    "✅ '{}' assigned": "✅ '{}' asignado",
+    "Could not invoke '{}': {}": "No se pudo ejecutar '{}': {}",
+    "Active RP: '{}'": "PR activo: '{}'",
+    "Reference point '{}' created": "Punto de referencia '{}' creado",
+    "Slab from curve '{}'": "Losa desde la curva '{}'",
+    "{} slab from '{}'": "Losa {} desde '{}'",
+    "Window placed on '{}'": "Ventana colocada en '{}'",
+    # ── v1.12: materiales procedurales, anotaciones y conjuntos ──
+    "Procedural Materials": "Materiales procedurales",
+    "Build node-based textures (brick and block bond, ceramic, wood grain, "
+    "concrete, marble, clay, plaster, fabric) for the ArchiForge materials "
+    "instead of flat colors; visible in Material Preview and Rendered shading":
+        "Construye texturas de nodos (aparejo de ladrillo y bloque, cerámica, "
+        "veta de madera, concreto, mármol, arcilla, pañete, tela) para los "
+        "materiales de ArchiForge en lugar de colores planos; se ven en los "
+        "modos Vista previa de material y Renderizado",
+    "Annotations": "Anotaciones",
+    "Sets": "Conjuntos",
+    "Dimension": "Cota",
+    "North": "Norte",
+    "Complete Bathroom (CO)": "Baño completo (CO)",
+    "Demo Apartment": "Apartamento demo",
+    "Add Grid Axes": "Añadir ejes",
+    "Add North Arrow": "Añadir norte",
+    "Add a north symbol at the 3D cursor": "Añade un símbolo de norte en el cursor 3D",
+    "Add structural axes from the 3D cursor: numbered axes along X and "
+    "lettered axes along Y, each ending in a bubble":
+        "Añade ejes estructurales desde el cursor 3D: ejes numerados a lo "
+        "largo de X y ejes con letra a lo largo de Y, cada uno terminado en "
+        "una burbuja",
+    "Add width and depth dimension lines around the plan footprint of each "
+    "selected object":
+        "Añade cotas de ancho y fondo alrededor de la huella en planta de "
+        "cada objeto seleccionado",
+    "ArchiForge Dimension: click start and end point · Esc: cancel":
+        "Cota ArchiForge: clic en el punto inicial y final · Esc: cancelar",
+    "Axes along X": "Ejes en X",
+    "Axes along Y": "Ejes en Y",
+    "Bevel of the annotation lines so they render; 0 for viewport-only wire lines":
+        "Bisel de las líneas de anotación para que se rendericen; 0 para "
+        "líneas de alambre solo en el visor",
+    "Bubble Radius": "Radio de burbuja",
+    "Bubbles at Both Ends": "Burbujas en ambos extremos",
+    "Click two points in the viewport to add a dimension line between them "
+    "(ESC to cancel)":
+        "Haga clic en dos puntos del visor para añadir una cota entre ellos "
+        "(Esc para cancelar)",
+    "Decimals": "Decimales",
+    "Decimals of metric dimension labels": "Decimales de las etiquetas de cota métricas",
+    "Dimension Selected": "Acotar selección",
+    "Dimension created: {}": "Cota creada: {}",
+    "Dimension points are too close": "Los puntos de la cota están demasiado cerca",
+    "Distance from the measured edge to the dimension line":
+        "Distancia entre el borde medido y la línea de cota",
+    "Draw Dimension": "Dibujar cota",
+    "Extension": "Extensión",
+    "Grid axes created: {}": "Ejes creados: {}",
+    "Height of the dimension text": "Altura del texto de la cota",
+    "Hide": "Ocultar",
+    "How far the axis lines run past the grid":
+        "Cuánto sobresalen las líneas de eje más allá de la rejilla",
+    "Line Thickness": "Grosor de línea",
+    "No measurable objects selected": "No hay objetos medibles seleccionados",
+    "North Angle": "Ángulo del norte",
+    "North Arrow": "Norte",
+    "North arrow created": "Norte creado",
+    "Number of lettered axes (A, B, C…)": "Número de ejes con letra (A, B, C…)",
+    "Number of numbered axes (1, 2, 3…)": "Número de ejes numerados (1, 2, 3…)",
+    "Plan Symbols": "Símbolos de planta",
+    "Rotation of north counter-clockwise from +Y":
+        "Giro del norte en sentido antihorario desde +Y",
+    "Show/Hide Annotations": "Mostrar/ocultar anotaciones",
+    "Size": "Tamaño",
+    "Text Size": "Tamaño de texto",
+    "Toggle the visibility of every ArchiForge annotation":
+        "Alterna la visibilidad de todas las anotaciones de ArchiForge",
+    "Viewport drawing is not available": "El dibujo en el visor no está disponible",
+    "{} annotation object(s)": "{} objeto(s) de anotación",
+    "{} annotation(s) hidden": "{} anotación(es) oculta(s)",
+    "{} annotation(s) shown": "{} anotación(es) mostrada(s)",
+    "{} dimension(s) created": "{} cota(s) creada(s)",
+    "Apartment: {} objects, skipped: {}": "Apartamento: {} objetos, omitidos: {}",
+    "Bathroom set created: {} objects": "Conjunto de baño creado: {} objetos",
+    "Bathroom set: {} objects, skipped: {}": "Conjunto de baño: {} objetos, omitidos: {}",
+    "Build a 6 × 7 m demo apartment at the 3D cursor: walls, floors, complete "
+    "bathroom, open kitchen, living/dining, two bedrooms, openings, "
+    "furniture, electrical items, dimensions and north arrow":
+        "Construye un apartamento demo de 6 × 7 m en el cursor 3D: muros, "
+        "pisos, baño completo, cocina abierta, sala-comedor, dos alcobas, "
+        "aberturas, mobiliario, elementos eléctricos, cotas y norte",
+    "Build a complete bathroom at the 3D cursor: walls, ceramic floor, door, "
+    "high window, sink, toilet, shower with electric shower head, "
+    "accessories and electrical items. Reference layout, edit freely":
+        "Construye un baño completo en el cursor 3D: muros, piso cerámico, "
+        "puerta, ventana alta, lavamanos, sanitario, ducha con ducha "
+        "eléctrica, accesorios y elementos eléctricos. Distribución de "
+        "referencia, edítela libremente",
+    "Built at the 3D cursor": "Se construyen en el cursor 3D",
+    "Demo apartment created: {} objects": "Apartamento demo creado: {} objetos",
+    "Door and Window": "Puerta y ventana",
+    "Exterior Walls": "Muros exteriores",
+    "Fixtures": "Aparatos sanitarios",
+    "Interior Depth": "Fondo interior",
+    "Interior Walls": "Muros interiores",
+    "Interior Width": "Ancho interior",
+    "Reference layouts, edit freely": "Distribuciones de referencia, edítelas libremente",
+    "The set could not be created": "No se pudo crear el conjunto",
+    "Used when the wall reference is Custom":
+        "Se usa cuando la referencia de muro es Personalizado",
+    "Wall Reference": "Referencia de muro",
+    "Start": "Inicio",
+    "End": "Fin",
 }
 
 # Strings that read the same in both languages (brands, codes, units...).
@@ -2057,6 +2293,8 @@ SAME_IN_SPANISH = frozenset({
     "45 x 45 cm",
     "60 x 120 cm",
     "60 x 60 cm",
+    "AF Snap: {}",
+    "Cursor → {}",
 })
 
 # Source strings that are already Spanish; shown as-is in Spanish mode and
@@ -2421,4 +2659,48 @@ ENGLISH_FOR_SPANISH_SOURCE = {
     "Maciza": "Solid",
     "Losa maciza en concreto": "Solid concrete slab",
     "Viguetas + casetones + torta": "Joists + void formers + topping",
+    # ── operator reports (self.report) written in Spanish ──
+    "✅ Cutter '{}' añadido. Muévelo para posicionar el hueco.":
+        "✅ Cutter '{}' added. Move it to position the opening.",
+    "El objeto no pertenece a la habitación elegida":
+        "The object does not belong to the selected room",
+    "Etiquetas de Dimensión: {}": "Dimension Labels: {}",
+    "Manipuladores AF: {}": "AF Manipulators: {}",
+    "Muro creado: {}": "Wall created: {}",
+    "Máximo de 64 vértices alcanzado": "Maximum of 64 vertices reached",
+    "No se encontró muro cercano": "No nearby wall found",
+    "No se pudo crear el muro: {}": "Could not create the wall: {}",
+    "No se pudo crear el objeto: {}": "Could not create the object: {}",
+    "No se pudo exportar el CSV: {}": "Could not export the CSV: {}",
+    "No se pudo iniciar el dibujo: {}": "Could not start drawing: {}",
+    "No se pudo intersectar el cursor con el plano de dibujo":
+        "Could not intersect the cursor with the drawing plane",
+    "Recinto cerrado creado: {}": "Closed room created: {}",
+    "Se exportaron {} filas a CSV": "{} rows exported to CSV",
+    "Selecciona puertas o ventanas ArchiForge primero":
+        "Select ArchiForge doors or windows first",
+    "{} creado: {}": "{} created: {}",
+    "⚠️  Auto Boolean: {} error(es). ¿Hay muros AF cerca?":
+        "⚠️  Auto Boolean: {} error(s). Are there AF walls nearby?",
+    "✅ Auto Boolean: {} objeto(s) procesado(s)":
+        "✅ Auto Boolean: {} object(s) processed",
+    "✅ Booleans limpiados": "✅ Booleans cleaned",
+    "El contorno debe medir al menos 0.10 m en X e Y":
+        "The outline must measure at least 0.10 m in X and Y",
+    "Se necesitan al menos 3 vértices para cerrar un recinto":
+        "At least 3 vertices are needed to close a room",
+    "El contorno tiene área nula; revisa los vértices":
+        "The outline has zero area; check the vertices",
+    "Se necesitan al menos 2 vértices": "At least 2 vertices are needed",
+    "Hay dos vértices consecutivos demasiado cercanos":
+        "Two consecutive vertices are too close",
+    "Se necesitan al menos 3 vértices para triangular":
+        "At least 3 vertices are needed to triangulate",
+    "El contorno no tiene área suficiente":
+        "The outline does not have enough area",
+    "No se pudo triangular el contorno del piso":
+        "Could not triangulate the floor outline",
+    "✅ {} boolean(s) reasignados a '{}'": "✅ {} boolean(s) reassigned to '{}'",
+    "Door → boolean en '{}'": "Door → boolean on '{}'",
+    "Window → boolean en '{}'": "Window → boolean on '{}'",
 }

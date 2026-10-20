@@ -26,6 +26,12 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
 
 AF_DECOR_PROP = "archiforge_decor"
 AF_DECOR_VERSION = 1
@@ -966,7 +972,7 @@ class ARCHIFORGE_OT_decor(Operator):
         finally:
             _SUSPEND = False
         _rebuild_decor_mesh(obj, props)
-        self.report({'INFO'}, f"Decor item created: {obj.name}")
+        self.report({'INFO'}, _tr("Decor item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -986,7 +992,7 @@ class ARCHIFORGE_OT_decor_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_decor_mesh(obj, obj.archiforge_decor)
-        self.report({'INFO'}, "Decor item updated")
+        self.report({'INFO'}, _tr("Decor item updated"))
         return {'FINISHED'}
 
 
@@ -1008,7 +1014,7 @@ class ARCHIFORGE_OT_decor_reset(Operator):
         props = obj.archiforge_decor
         _apply_type_defaults(props, props.item_type)
         _rebuild_decor_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 

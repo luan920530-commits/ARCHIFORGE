@@ -20,8 +20,14 @@ from .af_construction_presets import (
     WALL_PRESET_NOTE,
     preset_for_wall_thickness,
     wall_preset_items,
+    wall_preset_material,
     wall_preset_thickness,
 )
+
+try:
+    from . import af_material
+except ImportError:  # pragma: no cover - fuera del paquete
+    af_material = None
 
 from bpy.types import (
     PropertyGroup,
@@ -38,6 +44,12 @@ from bpy.props import (
     PointerProperty,
     StringProperty,
 )
+
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
 
 
 # ════════════════════════════════════════════════════════════
@@ -419,6 +431,30 @@ def af_wall_update(self, context):
     _rebuild_wall_mesh(obj, props)
 
 
+def _apply_wall_preset_material(obj, preset):
+    """Put the preset's catalogue material in the wall face slot (0).
+
+    Brick/block bond is a procedural texture (see af_material_procedural),
+    the wall remains one solid. CUSTOM leaves the slot untouched.
+    """
+    name = wall_preset_material(preset)
+    if name is None or af_material is None or obj is None:
+        return False
+    try:
+        mat = af_material.ensure_af_material(name)
+        if mat is None:
+            return False
+        materials = obj.data.materials
+        if len(materials) == 0:
+            materials.append(mat)
+        else:
+            materials[0] = mat
+        return True
+    except Exception as err:  # noqa: BLE001 - never block the rebuild
+        print("[ArchiForge] wall preset material: {}".format(err))
+        return False
+
+
 def af_wall_preset_update(self, context):
     """Apply the preset's reference thickness (the user can edit it after)."""
     global _WALL_UPDATE_SUSPENDED
@@ -432,6 +468,10 @@ def af_wall_preset_update(self, context):
         self.width = thickness
     finally:
         _WALL_UPDATE_SUSPENDED = previous_suspend
+    obj = _find_wall_object(self)
+    if obj is None and context is not None:
+        obj = context.active_object
+    _apply_wall_preset_material(obj, self.wall_preset)
     af_wall_update(self, context)
 
 
@@ -574,12 +614,83 @@ class ARCHIFORGE_OT_wall(Operator):
         props.width           = self.width if thickness is None else thickness
         props.wall_preset     = self.wall_preset
         props.parts[0].length = self.length
+        _apply_wall_preset_material(obj, self.wall_preset)
         _rebuild_wall_mesh(obj, props)
-        self.report({'INFO'}, f"ArchiForge Wall created: {obj.name}")
+        self.report({'INFO'}, _tr("ArchiForge Wall created: {}").format(obj.name))
         return {'FINISHED'}
 
     def invoke(self, context, event):
         return self.execute(context)
+
+
+def create_wall_from_points(context, points, height=2.7, width=0.2,
+                            wall_preset=CUSTOM_PRESET, closed=False,
+                            name=None, edges=None):
+    """Create a parametric wall whose centreline follows ``points`` (XY).
+
+    Shared by the viewport draw tool and the combined sets. ``edges`` may
+    be precomputed ``(length, relative_angle)`` pairs; otherwise they are
+    derived with :func:`build_wall_segments`. Raises ``ValueError`` for an
+    invalid outline and removes the object if the mesh rebuild fails.
+    """
+    global _WALL_UPDATE_SUSPENDED
+
+    points = [Vector((float(p[0]), float(p[1]),
+                      float(p[2]) if len(p) > 2 else 0.0)) for p in points]
+    if edges is None:
+        edges = build_wall_segments(
+            points, closed=closed, min_segment_length=AF_WALL_MIN_LEN,
+            max_segments=AF_WALL_DRAW_MAX_POINTS)
+    segment_count = len(edges)
+    if not 1 <= segment_count <= AF_WALL_DRAW_MAX_POINTS:
+        raise ValueError(
+            f"El muro admite entre 1 y {AF_WALL_DRAW_MAX_POINTS} segmentos"
+        )
+
+    bpy.ops.object.select_all(action='DESELECT')
+    if name is None:
+        name = "AF_RoomWall" if closed else "AF_Wall"
+    obj, props = _create_wall_object(context, name)
+    mesh = obj.data
+    obj.location = points[0]
+
+    try:
+        _WALL_UPDATE_SUSPENDED = True
+        try:
+            props.n_parts = segment_count
+            while len(props.parts) < segment_count:
+                props.parts.add()
+            while len(props.parts) > segment_count:
+                props.parts.remove(len(props.parts) - 1)
+            thickness = wall_preset_thickness(wall_preset)
+            props.height = height
+            props.width = width if thickness is None else thickness
+            props.wall_preset = wall_preset
+            props.closed = closed
+            props.is_af_wall = True
+            props.object_name = obj.name
+            _apply_wall_preset_material(obj, wall_preset)
+
+            for index, (length, relative_angle) in enumerate(edges):
+                segment = props.parts[index]
+                segment.enabled = True
+                segment.length = length
+                segment.angle = relative_angle
+        finally:
+            _WALL_UPDATE_SUSPENDED = False
+
+        _rebuild_wall_mesh(obj, props)
+        return obj
+    except Exception:
+        # Do not leave an empty or partially generated parametric object
+        # behind if Blender fails while rebuilding the mesh.
+        if obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh.users == 0 and mesh.name in bpy.data.meshes:
+            bpy.data.meshes.remove(mesh)
+        raise
+    finally:
+        _WALL_UPDATE_SUSPENDED = False
 
 
 def _wall_draw_world_point(context, event, plane_z):
@@ -664,7 +775,7 @@ class ARCHIFORGE_OT_wall_draw(Operator):
             context.window_manager.modal_handler_add(self)
         except Exception as exc:
             self._remove_draw_handler()
-            self.report({'ERROR'}, f"No se pudo iniciar el dibujo: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo iniciar el dibujo: {}").format(exc))
             return {'CANCELLED'}
         self._set_header(context)
         context.area.tag_redraw()
@@ -803,57 +914,10 @@ class ARCHIFORGE_OT_wall_draw(Operator):
         ) <= AF_WALL_DRAW_CLOSE_PIXELS
 
     def _create_wall(self, context, closed, edges):
-        global _WALL_UPDATE_SUSPENDED
-
-        points = list(self._points)
-        segment_count = len(edges)
-        if not 1 <= segment_count <= AF_WALL_DRAW_MAX_POINTS:
-            raise ValueError(
-                f"El muro admite entre 1 y {AF_WALL_DRAW_MAX_POINTS} segmentos"
-            )
-
-        bpy.ops.object.select_all(action='DESELECT')
-        name = "AF_RoomWall" if closed else "AF_Wall"
-        obj, props = _create_wall_object(context, name)
-        mesh = obj.data
-        obj.location = points[0]
-
-        try:
-            _WALL_UPDATE_SUSPENDED = True
-            try:
-                props.n_parts = segment_count
-                while len(props.parts) < segment_count:
-                    props.parts.add()
-                while len(props.parts) > segment_count:
-                    props.parts.remove(len(props.parts) - 1)
-                thickness = wall_preset_thickness(self.wall_preset)
-                props.height = self.height
-                props.width = self.width if thickness is None else thickness
-                props.wall_preset = self.wall_preset
-                props.closed = closed
-                props.is_af_wall = True
-                props.object_name = obj.name
-
-                for index, (length, relative_angle) in enumerate(edges):
-                    segment = props.parts[index]
-                    segment.enabled = True
-                    segment.length = length
-                    segment.angle = relative_angle
-            finally:
-                _WALL_UPDATE_SUSPENDED = False
-
-            _rebuild_wall_mesh(obj, props)
-            return obj
-        except Exception:
-            # Do not leave an empty or partially generated parametric object
-            # behind if Blender fails while rebuilding the mesh.
-            if obj.name in bpy.data.objects:
-                bpy.data.objects.remove(obj, do_unlink=True)
-            if mesh.users == 0 and mesh.name in bpy.data.meshes:
-                bpy.data.meshes.remove(mesh)
-            raise
-        finally:
-            _WALL_UPDATE_SUSPENDED = False
+        return create_wall_from_points(
+            context, list(self._points), height=self.height,
+            width=self.width, wall_preset=self.wall_preset, closed=closed,
+            edges=edges)
 
     def _finish(self, context, closed):
         try:
@@ -864,19 +928,19 @@ class ARCHIFORGE_OT_wall_draw(Operator):
                 max_segments=AF_WALL_DRAW_MAX_POINTS,
             )
         except ValueError as exc:
-            self.report({'WARNING'}, str(exc))
+            self.report({'WARNING'}, _tr(str(exc)))
             return {'RUNNING_MODAL'}
 
         try:
             obj = self._create_wall(context, closed, edges)
         except Exception as exc:
-            self.report({'ERROR'}, f"No se pudo crear el muro: {exc}")
+            self.report({'ERROR'}, _tr("No se pudo crear el muro: {}").format(exc))
             self._remove_draw_handler()
             return {'CANCELLED'}
         self._remove_draw_handler()
         self.report({'INFO'},
-                    f"Recinto cerrado creado: {obj.name}" if closed
-                    else f"Muro creado: {obj.name}")
+                    (_tr("Recinto cerrado creado: {}") if closed
+                     else _tr("Muro creado: {}")).format(obj.name))
         return {'FINISHED'}
 
     def modal(self, context, event):
@@ -907,13 +971,13 @@ class ARCHIFORGE_OT_wall_draw(Operator):
             point = _wall_draw_world_point(context, event, self._draw_z)
             if point is None:
                 self.report({'WARNING'},
-                            "No se pudo intersectar el cursor con el plano de dibujo")
+                            _tr("No se pudo intersectar el cursor con el plano de dibujo"))
                 return {'RUNNING_MODAL'}
             point = self._snap_point(context, point)
             if self._points and (point - self._points[-1]).length < AF_WALL_MIN_LEN:
                 return {'RUNNING_MODAL'}
             if len(self._points) >= AF_WALL_DRAW_MAX_POINTS:
-                self.report({'WARNING'}, "Máximo de 64 vértices alcanzado")
+                self.report({'WARNING'}, _tr("Máximo de 64 vértices alcanzado"))
                 return {'RUNNING_MODAL'}
             self._points.append(point)
             self._hover = point.copy()
@@ -955,7 +1019,7 @@ class ARCHIFORGE_OT_wall_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_wall_mesh(obj, obj.archiforge_wall)
-        self.report({'INFO'}, "Wall updated")
+        self.report({'INFO'}, _tr("Wall updated"))
         return {'FINISHED'}
 
 
@@ -1061,7 +1125,7 @@ class ARCHIFORGE_PT_wall(Panel):
         col.prop(props, "width")
         if props.wall_preset != CUSTOM_PRESET:
             col.label(text="Reference thickness, editable - single solid, "
-                           "no bond or layers",
+                           "bond is a texture, no layers",
                       icon='INFO')
 
         # ── Opciones ──────────────────────────────────────────

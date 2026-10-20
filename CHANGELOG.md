@@ -5,6 +5,86 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.12.0] — 2026-10-20 — Materiales procedurales, unidades, anotaciones y conjuntos
+
+### Agregado
+- **Materiales procedurales** (`af_material_procedural.py` + `af_material.py`):
+  los materiales `AF.*` de obra se construyen con árboles de nodos en lugar de
+  un color plano —aparejo de ladrillo 24 × 7 cm y de bloque 39 × 19 cm con
+  junta rehundida (`ShaderNodeTexBrick` + `Bump`), cerámica, veta de madera,
+  concreto, mármol, arcilla de teja, pañete y tela—. Las recetas son datos
+  puros validados por `recipe_problems()` y solo usan nodos presentes en
+  Blender 3.3 LTS y 4.x. Nuevo material `AF.Wall.Block`. Preferencia
+  **Procedural Materials** (activa por defecto) que regenera los materiales
+  `AF.*` presentes en el archivo al cambiarla; **Create All AF Materials** y
+  **Reset** también usan la receta activa. El nodo `Principled BSDF` conserva
+  su nombre para que escaleras, muebles y aberturas sigan ajustándolo.
+- **Material según referencia de muro**: al elegir *Brick*, *Concrete*,
+  *Structural Block* o *Wood Frame* en un muro (al crear, al dibujar o en el
+  panel) el slot de cara recibe `AF.Wall.Brick`, `AF.Wall.Concrete`,
+  `AF.Wall.Block` o `AF.Wall.Plaster` (`wall_preset_material()` en
+  `af_construction_presets.py`); *Custom* no toca el material. La nota de la
+  referencia aclara que el aparejo es textura, no geometría.
+- **Sistema de unidades efectivo** (`af_units.py`): la preferencia
+  **Unit System** sincroniza `unit_settings` (sistema y unidad de longitud,
+  nunca la escala) de todas las escenas al cambiarla y con el botón **Apply
+  to Scenes**; `collect_quantities(objects, unit_system)` convierte
+  longitudes, áreas y volúmenes a `ft`, `ft2`, `ft3` en el CSV imperial;
+  `feet_and_inches()` rotula `10' 6"` en las cotas.
+- **Mensajes de estado traducidos**: 170 llamadas `self.report()` en 29
+  módulos pasan por `af_i18n.tr_report`, que busca el texto en el diccionario
+  del idioma activo del addon; las plantillas `{}` se traducen antes de
+  `format()`. `tests/test_i18n.py` exige que todo `self.report()` esté
+  envuelto en `_tr()` y que cada módulo con reportes importe el traductor.
+- **Anotaciones** (`af_annotation_geometry.py` puro + `af_annotation.py`):
+  **Dimension Selected** (ancho y fondo de la huella de cada objeto
+  seleccionado), **Draw Dimension** (dos clics en el visor, con previsualización
+  y snap de rejilla), **Grid Axes** (ejes numerados en X y con letra en Y,
+  burbujas en uno o ambos extremos) y **North Arrow**. Líneas como curvas con
+  bisel (renderizables) y textos como objetos de texto, agrupados en la
+  colección `AF_Annotations` con la propiedad `af_annotation`; botones de
+  mostrar/ocultar; panel propio, sección en el panel principal y entradas en
+  el menú Shift+A. Las etiquetas respetan el sistema de unidades.
+- **Conjuntos** (`af_sets.py`): **Complete Bathroom (CO)** —1.50 × 2.20 m
+  editables: muros, piso 30 × 30, puerta 0.70, ventana alta, lavamanos,
+  sanitario, ducha + ducha eléctrica, espejo, toallero, toma GFCI,
+  interruptor, luz— y **Demo Apartment** —6 × 7 m: perímetro de bloque,
+  divisiones de ladrillo, piso 60 × 60 recortado al baño, baño completo,
+  cocina abierta, sala-comedor, dos alcobas, 4 puertas y 5 ventanas con sus
+  booleanos sobre el muro correcto, mobiliario, eléctrico, cotas generales y
+  norte—. Cada paso está aislado: lo que falle se omite y se informa.
+  Nuevos helpers compartidos `af_wall.create_wall_from_points()` y
+  `af_floor.create_floor_from_outline()` (los usan también las herramientas
+  de dibujo).
+- Pruebas nuevas: `test_material_procedural.py`, `test_units.py`,
+  `test_annotation_geometry.py`, `test_stair_unification.py`, caso imperial
+  en `test_quantities_io.py` y comprobaciones de reportes en `test_i18n.py`
+  (135 pruebas). El stub headless expone `bpy.app.handlers`/`timers`.
+
+### Cambiado
+- **Escaleras unificadas**: `af_stairs.py` (copia idéntica que registraba
+  `archiforge.stairs` y `archiforge_stairs`) desaparece; `af_stair.py` es el
+  único módulo, mantiene el alias interno `archiforge.stairs` y migra en
+  `load_post` (y al activar el addon) los objetos guardados con el grupo
+  antiguo copiando sus propiedades y regenerando la malla.
+- `WALL_PRESET_NOTE` y la etiqueta del panel de muro: "sólido único sin capas,
+  aparejo como textura".
+- README: secciones v1.12, estructura de módulos, roadmap y límites del idioma
+  (los nombres generados siguen en inglés; los reportes ya se traducen).
+
+### Notas
+- Las texturas usan coordenadas de objeto en metros; en tramos diagonales el
+  aparejo se estira hasta un 41 %. Los archivos de versiones anteriores
+  conservan materiales planos hasta pulsar **Create All AF Materials**,
+  reiniciar el material o alternar la preferencia.
+- Las distribuciones de los conjuntos son referencias de partida (orientación
+  de aparatos, posiciones y medidas editables), no diseños normativos.
+- Fuera del alcance de esta versión (siguiente): módulo hidrosanitario, capas
+  de muro/aparejo como geometría, prueba de humo en Blender real dentro de CI
+  y `blender_manifest.toml`.
+
+---
+
 ## [1.11.0] — 2026-10-20 — Idioma del addon operativo (English / Español)
 
 ### Agregado
