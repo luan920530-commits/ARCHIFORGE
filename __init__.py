@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 10, 0),
+    "version"     : (1, 11, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -77,6 +77,22 @@ def _on_log_level_update(self, context):
         pass
 
 
+def _i18n_module():
+    """Módulo af_i18n si cargó correctamente (import tolerante)."""
+    mod = globals().get("af_i18n")
+    return mod if mod is not None and hasattr(mod, "apply_language") else None
+
+
+def _on_language_update(self, context):
+    """Registra el catálogo del idioma elegido y redibuja la interfaz."""
+    mod = _i18n_module()
+    if mod is None:
+        af_log("af_i18n no disponible; el idioma no se puede aplicar",
+               level=2)
+        return
+    mod.apply_language(self.language, __name__)
+
+
 # ════════════════════════════════════════════════════════════
 #  HOT-RELOAD — tolerante a fallos, orden de dependencias
 #  Orden CRÍTICO: core primero, luego objetos, luego UI
@@ -98,6 +114,8 @@ if "bpy" in locals():
 
     _RELOAD_ORDER = (
         # 1. Core (base del sistema)
+        "af_i18n_es",
+        "af_i18n",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -170,6 +188,8 @@ else:
     import importlib as _imp_first
     _FIRST_ORDER = (
         # 1. Core (base del sistema)
+        "af_i18n_es",
+        "af_i18n",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -353,11 +373,19 @@ class ArchiForge_Pref(AddonPreferences):
 
     language : EnumProperty(
         name="Addon language",
-        description="Language used by ArchiForge only",
+        description=("Language used by ArchiForge only; Blender keeps its "
+                     "own language"),
         items=[('EN', "English", "Show ArchiForge in English"),
                ('ES', "Español", "Mostrar ArchiForge en español")],
         default='EN',
+        update=_on_language_update,
     )
+    # Casillas de traducción de Blender que el addon activó (para
+    # restaurarlas al desactivarlo).
+    i18n_forced_use_translate_interface : BoolProperty(
+        default=False, options={'HIDDEN'})
+    i18n_forced_use_translate_tooltips : BoolProperty(
+        default=False, options={'HIDDEN'})
 
     # ── Pestaña activa en preferencias ──────────────────────
     pref_tab : EnumProperty(
@@ -576,6 +604,7 @@ class ArchiForge_Pref(AddonPreferences):
         box = col.box()
         box.label(text="Interface", **_icon_kw(icons, "control_center", 'WINDOW'))
         box.prop(self, "language")
+        self._draw_language_hints(box)
         box.prop(self, "create_submenu")
         box.prop(self, "unit_system")
 
@@ -589,6 +618,26 @@ class ArchiForge_Pref(AddonPreferences):
         box = col.box()
         box.label(text="Material Library", **_icon_kw(icons, "material", 'MATERIAL'))
         box.prop(self, "matlib_path", text="")
+
+    def _draw_language_hints(self, box):
+        """Avisa si Blender tiene apagadas las casillas que permiten
+        traducir la interfaz del addon y las ofrece para activarlas."""
+        mod = _i18n_module()
+        if mod is None:
+            box.label(text="Language module unavailable", icon='ERROR')
+            return
+        if mod.blender_flags_enabled():
+            return
+        col = box.column(align=True)
+        col.label(text="Blender translation is off; enable it to apply the "
+                       "addon language", icon='INFO')
+        try:
+            view = bpy.context.preferences.view
+        except Exception:  # noqa: BLE001
+            return
+        row = col.row(align=True)
+        row.prop(view, "use_translate_interface", text="Translate Interface")
+        row.prop(view, "use_translate_tooltips", text="Translate Tooltips")
 
     def _draw_manipulators(self, layout):
         col = layout.column(align=True)
@@ -1426,6 +1475,14 @@ def register():
     except Exception:
         pass
 
+    # ── Idioma del addon (independiente del de Blender) ─────
+    i18n = _i18n_module()
+    if i18n is not None:
+        try:
+            i18n.apply_language(i18n.current_language(__name__), __name__)
+        except Exception as e:  # noqa: BLE001
+            af_log(f"No se pudo aplicar el idioma del addon: {e}", level=2)
+
     # ── Reporte final ────────────────────────────────────────
     print("─" * 55)
     print(f"  ✅  ArchiForge v{ver} — {ok_count} módulos OK", end="")
@@ -1439,6 +1496,14 @@ def register():
 
 
 def unregister():
+    # ── Liberar el catálogo de idioma ────────────────────────
+    i18n = _i18n_module()
+    if i18n is not None:
+        try:
+            i18n.release(__name__)
+        except Exception as e:  # noqa: BLE001
+            af_log(f"Error liberando traducciones: {e}", level=2)
+
     # ── Quitar del menú Shift+A ──────────────────────────────
     try:
         bpy.types.VIEW3D_MT_mesh_add.remove(menu_func)

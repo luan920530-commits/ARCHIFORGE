@@ -1278,7 +1278,8 @@ class ARCHIFORGE_PT_window(Panel):
             col.prop(props, "shutter_depth")
             col.operator(
                 "archiforge.window_toggle_shutters",
-                text="Open" if not props.shutter_open else "Close",
+                text=("Open Shutters" if not props.shutter_open
+                      else "Close Shutters"),
                 icon='TRIA_RIGHT' if not props.shutter_open else 'TRIA_LEFT',
             )
 

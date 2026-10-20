@@ -158,7 +158,7 @@ class AF_FurnitureProperties(PropertyGroup):
     sofa_chaise : BoolProperty(name="Chaise (left)", default=False,
                                update=af_furniture_update)
     # mesas
-    top_shape : EnumProperty(name="Top", items=AF_TOP_SHAPE,
+    top_shape : EnumProperty(name="Top Shape", items=AF_TOP_SHAPE,
                              default='RECT', update=af_furniture_update)
     glass_top : BoolProperty(name="Glass Top", default=False,
                              update=af_furniture_update)

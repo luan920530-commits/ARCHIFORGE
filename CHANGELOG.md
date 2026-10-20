@@ -5,6 +5,48 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.11.0] — 2026-10-20 — Idioma del addon operativo (English / Español)
+
+### Agregado
+- El selector **Addon language** de las preferencias ahora traduce de verdad
+  la interfaz de ArchiForge sin cambiar el idioma de Blender: paneles, menús,
+  operadores, nombres de propiedades, opciones de desplegables y descripciones
+  emergentes. `af_i18n.py` construye el diccionario `{(contexto, msgid):
+  msgstr}` y lo registra con `bpy.app.translations` bajo el locale activo
+  (incluido `en_US`); el cambio es inmediato y se conserva con las
+  preferencias.
+- `af_i18n_es.py`: unas 1 750 cadenas English → Español, 320 cadenas escritas
+  en español (biblioteca por ambientes, algunos presets) con su versión en
+  inglés para el modo *English*, y la lista de términos invariantes.
+- Las casillas **Translate Interface / Translate Tooltips** de Blender —que
+  Blender apaga cuando su idioma es inglés— se activan al aplicar el idioma y
+  se restauran al desactivar el addon si fue este quien las encendió. Si
+  quedan apagadas, el panel de preferencias lo avisa y las ofrece.
+- Pruebas: `tests/ui_strings.py` extrae por AST todas las cadenas de interfaz
+  (`text=`, `name=`, `description=`, `bl_label`, items de enum, enums
+  dinámicos) y `tests/test_i18n.py` exige que todas estén en el diccionario,
+  sin duplicados, entradas vacías ni marcadores `{}`/`%` perdidos, y comprueba
+  registro, cambio de idioma, restauración de casillas y resolución de
+  locale contra el stub de `bpy.app.translations`.
+
+### Cambiado
+- Etiquetas cortas que compartían msgid con significados distintos se
+  renombraron en inglés para traducirse sin ambigüedad: el tablero eléctrico
+  *Recessed* pasa a **Recessed in Wall**, la forma de tablero de mesa *Top* a
+  **Top Shape** y el botón de contraventanas *Open / Close* a **Open Shutters /
+  Close Shutters**.
+
+### Limitaciones conocidas
+- Si Blender se ejecuta en español, sus propias traducciones de términos
+  genéricos prevalecen también con el addon en *English*.
+- Los mensajes de `self.report()` y los nombres de objetos/materiales
+  generados permanecen en inglés.
+- Al cambiar el idioma de Blender, este restablece sus casillas de
+  traducción; el addon las vuelve a activar al reiniciar o al elegir de
+  nuevo el idioma.
+
+---
+
 ## [1.10.0] — 2026-10-20 — Ventanas abatibles, formatos de piso y referencias de muro
 
 ### Agregado
@@ -65,7 +107,8 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ### Agregado
 - Selector de idioma English/Español en las preferencias de ArchiForge,
-  independiente del idioma configurado en Blender.
+  independiente del idioma configurado en Blender (solo la preferencia; la
+  traducción efectiva llega en 1.11.0).
 
 ### Corregido
 - Posición local de la manija de puertas de una hoja: con bisagra a la derecha

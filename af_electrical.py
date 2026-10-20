@@ -348,7 +348,7 @@ class AF_ElectricalProperties(PropertyGroup):
         update=af_electrical_update,
     )
     panel_recessed : BoolProperty(
-        name="Recessed", default=True, update=af_electrical_update,
+        name="Recessed in Wall", default=True, update=af_electrical_update,
     )
 
     # ── Luz real de Blender ─────────────────────────────────

@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.10.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.11.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -115,6 +115,31 @@ de referencia editables, no exigencias normativas: el muro sigue siendo un solo
 sólido sin aparejo ni capas, y al modificar el espesor a mano la referencia
 pasa a *Custom*.
 
+## 🌐 Idioma del addon: English / Español (nuevo en v1.11)
+
+En **Edit ▸ Preferences ▸ Add-ons ▸ ArchiForge ▸ General ▸ Addon language**
+se elige el idioma de ArchiForge sin tocar el idioma de Blender. En
+**Español** se traducen paneles, menús, operadores, nombres de propiedades,
+opciones de los desplegables y descripciones emergentes (unas 1 750 cadenas
+cubiertas por `af_i18n_es.py`). En **English** las fichas de la biblioteca
+por ambientes y algunos presets escritos originalmente en español se muestran
+en inglés. El cambio es inmediato y queda guardado con las preferencias.
+
+Cómo funciona y qué límites tiene:
+
+- ArchiForge registra su diccionario mediante `bpy.app.translations` bajo el
+  locale activo de Blender, de modo que la traducción aplica aunque Blender
+  esté en inglés. Blender desactiva las casillas **Translate Interface** y
+  **Translate Tooltips** cuando su idioma es inglés; el addon las activa al
+  aplicar el idioma y las restaura al desactivarse. Si se apagan a mano (o al
+  cambiar el idioma de Blender), el panel de preferencias lo avisa y permite
+  volver a encenderlas.
+- Si Blender ya se ejecuta en español, los términos genéricos que Blender
+  traduce por su cuenta (p. ej. *Width*) conservan la traducción de Blender,
+  también con el addon en *English*.
+- Los mensajes de la barra de estado (`self.report`) y los nombres de
+  objetos/materiales generados no se traducen.
+
 ---
 
 ## 🎨 Iconos propios
@@ -223,8 +248,10 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.10.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.11.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
+├── af_i18n.py           # Idioma del addon: tablas para bpy.app.translations (v1.11)
+├── af_i18n_es.py        # Diccionario English ⇄ Español de toda la interfaz
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
 ├── af_room_assets_catalog.py # Catálogo puro de 100 presets por ambiente
@@ -258,8 +285,9 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.11.0** — Idioma del addon English/Español operativo: traduce paneles, operadores, propiedades, desplegables y descripciones sin cambiar el idioma de Blender
 - **v1.10.0** — Ventanas abatibles/proyectantes que giran hoja, vidrio y divisiones; formatos de baldosa 30×30 → 60×120; juntas a ras/resaltadas/rehundidas; referencias de espesor de muro
-- **v1.9.0** — Selector de idioma English/Español y corrección de la manija de puertas con bisagra derecha
+- **v1.9.0** — Selector de idioma English/Español en preferencias (sin efecto hasta v1.11) y corrección de la manija de puertas con bisagra derecha
 - **v1.8.0** — Biblioteca paramétrica de 100 objetos/sets para dormitorio, sala, cocina, baño y solar/jardín
 - **v1.7.0** — Dibujo de contornos de losa/piso, recorte poligonal y ciclo de booleanos paramétricos
 - **v1.6.0** — Dibujo de muros conectados y recintos cerrados con esquinas automáticas
@@ -295,8 +323,11 @@ python -m unittest discover -s tests -v
 
 Comprueba sintaxis compatible con Python 3.10, unicidad de identificadores
 Blender, cantidades/CSV, triangulación y recorte poligonal, el catálogo de
-presets de muro/baldosa y el flujo de creación/actualización de booleanos.
-`tests/blender_stub.py` sustituye `bpy`/`bmesh`/`mathutils` por contenedores
+presets de muro/baldosa, el flujo de creación/actualización de booleanos y
+la traducción del addon (`tests/test_i18n.py`: toda cadena de interfaz
+detectada por `tests/ui_strings.py` debe existir en `af_i18n_es.py`, sin
+claves duplicadas ni marcadores de formato perdidos; `python
+tests/ui_strings.py` lista las que falten). `tests/blender_stub.py` sustituye `bpy`/`bmesh`/`mathutils` por contenedores
 mínimos para ejecutar los generadores reales de ventanas y pisos y verificar
 sus coordenadas (hojas giradas con vidrio y divisiones, pernios sobre el eje,
 alturas de junta y losa base). La interacción modal, los materiales y el
