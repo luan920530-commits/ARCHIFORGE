@@ -26,6 +26,21 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 
 AF_DECOR_PROP = "archiforge_decor"
 AF_DECOR_VERSION = 1
@@ -941,7 +956,8 @@ class ARCHIFORGE_OT_decor(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Decor Item", icon='MESH_CUBE')
+        col.label(text="New Decor Item",
+                  **_icon(_item_icon(self.item_type, "decor"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -966,7 +982,7 @@ class ARCHIFORGE_OT_decor(Operator):
         finally:
             _SUSPEND = False
         _rebuild_decor_mesh(obj, props)
-        self.report({'INFO'}, f"Decor item created: {obj.name}")
+        self.report({'INFO'}, _tr("Decor item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -986,7 +1002,7 @@ class ARCHIFORGE_OT_decor_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_decor_mesh(obj, obj.archiforge_decor)
-        self.report({'INFO'}, "Decor item updated")
+        self.report({'INFO'}, _tr("Decor item updated"))
         return {'FINISHED'}
 
 
@@ -1008,7 +1024,7 @@ class ARCHIFORGE_OT_decor_reset(Operator):
         props = obj.archiforge_decor
         _apply_type_defaults(props, props.item_type)
         _rebuild_decor_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 
@@ -1029,7 +1045,7 @@ class ARCHIFORGE_PT_decor(Panel):
                 and obj.archiforge_decor.is_af_decor)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("decor", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_decor
@@ -1040,7 +1056,8 @@ class ARCHIFORGE_PT_decor(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "decor"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -1061,7 +1078,8 @@ class ARCHIFORGE_PT_decor(Panel):
         if t == 'PLANTER':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Planter", icon='MESH_CUBE')
+            col.label(text="Planter",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "pot_style", text="")
             col.prop(props, "plant", text="")
             col.prop(props, "fullness", text="")
@@ -1069,26 +1087,30 @@ class ARCHIFORGE_PT_decor(Panel):
         if t in ('FLOOR_LAMP', 'TABLE_LAMP'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Lamp", icon='LIGHT')
+            col.label(text="Lamp",
+                      **_icon(_item_icon(t, "decor"), 'LIGHT'))
             col.prop(props, "shade_style", text="")
 
         if t == 'VASE_SET':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Vases", icon='MESH_CUBE')
+            col.label(text="Vases",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "flowers")
 
         if t == 'WALL_ART':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Art", icon='MESH_CUBE')
+            col.label(text="Art",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "art_style", text="")
             col.prop(props, "frame_style", text="")
 
         if t == 'CLOCK':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Time", icon='TIME')
+            col.label(text="Time",
+                      **_icon(_item_icon(t, "decor"), 'TIME'))
             col.prop(props, "hour")
             col.prop(props, "minute")
             col.prop(props, "seconds")
@@ -1096,14 +1118,16 @@ class ARCHIFORGE_PT_decor(Panel):
         if t == 'BOOKS':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Books", icon='MESH_CUBE')
+            col.label(text="Books",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "arrangement", text="")
             col.prop(props, "book_count")
 
         if t == 'TV':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="TV", icon='MESH_CUBE')
+            col.label(text="TV",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "tv_size", text="")
             col.prop(props, "tv_mount", text="")
             col.prop(props, "tv_on")
@@ -1112,7 +1136,8 @@ class ARCHIFORGE_PT_decor(Panel):
         if t == 'RUG':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Rug", icon='MESH_CUBE')
+            col.label(text="Rug",
+                      **_icon(_item_icon(t, "decor"), 'MESH_CUBE'))
             col.prop(props, "rug_shape", text="")
             if props.rug_shape == 'RECT':
                 col.prop(props, "fringe")

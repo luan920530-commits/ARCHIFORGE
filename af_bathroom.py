@@ -38,6 +38,21 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 
 AF_BATH_PROP = "archiforge_bathroom"
 AF_BATH_VERSION = 2
@@ -1288,7 +1303,8 @@ class ARCHIFORGE_OT_bathroom(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Bathroom Fixture", icon='SPHERE')
+        col.label(text="New Bathroom Fixture",
+                  **_icon(_item_icon(self.item_type, "bathroom"), 'SPHERE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -1313,7 +1329,7 @@ class ARCHIFORGE_OT_bathroom(Operator):
         finally:
             _SUSPEND = False
         _rebuild_bathroom_mesh(obj, props)
-        self.report({'INFO'}, f"Bathroom item created: {obj.name}")
+        self.report({'INFO'}, _tr("Bathroom item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1333,7 +1349,7 @@ class ARCHIFORGE_OT_bathroom_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_bathroom_mesh(obj, obj.archiforge_bathroom)
-        self.report({'INFO'}, "Bathroom item updated")
+        self.report({'INFO'}, _tr("Bathroom item updated"))
         return {'FINISHED'}
 
 
@@ -1355,7 +1371,7 @@ class ARCHIFORGE_OT_bathroom_reset(Operator):
         props = obj.archiforge_bathroom
         _apply_type_defaults(props, props.item_type)
         _rebuild_bathroom_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset to defaults")
+        self.report({'INFO'}, _tr("Dimensions reset to defaults"))
         return {'FINISHED'}
 
 
@@ -1379,7 +1395,7 @@ class ARCHIFORGE_PT_bathroom(Panel):
                 and obj.archiforge_bathroom.is_af_bathroom)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SPHERE')
+        self.layout.label(text="", **_icon("bathroom", 'SPHERE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_bathroom
@@ -1390,7 +1406,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "bathroom"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -1409,7 +1426,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t in ('TOILET', 'BIDET'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="WC Options", icon='MESH_CUBE')
+            col.label(text="WC Options",
+                      **_icon(_item_icon(t, "bathroom"), 'MESH_CUBE'))
             col.prop(props, "toilet_wallhung")
             if props.toilet_wallhung:
                 col.prop(props, "concealed_frame")
@@ -1421,7 +1439,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t in ('PEDESTAL_SINK', 'WALLHUNG_BASIN'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Basin", icon='SPHERE')
+            col.label(text="Basin",
+                      **_icon(_item_icon(t, "bathroom"), 'SPHERE'))
             col.prop(props, "faucet_enable")
             col.prop(props, "trap_enable")
             if t == 'WALLHUNG_BASIN':
@@ -1430,7 +1449,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t == 'VANITY':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Cabinet", icon='MESH_CUBE')
+            col.label(text="Cabinet",
+                      **_icon(_item_icon(t, "bathroom"), 'MESH_CUBE'))
             col.prop(props, "vanity_style", text="")
             col.prop(props, "basin_type", text="")
             col.prop(props, "cabinet_height")
@@ -1444,7 +1464,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t == 'SHOWER':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Shower", icon='DRAG_HANDLE')
+            col.label(text="Shower",
+                      **_icon(_item_icon(t, "bathroom"), 'DRAG_HANDLE'))
             col.prop(props, "enclosure", text="")
             col.prop(props, "tray_height")
             col.prop(props, "build_walls")
@@ -1459,7 +1480,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t == 'BATHTUB':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Bathtub", icon='MESH_UVSPHERE')
+            col.label(text="Bathtub",
+                      **_icon(_item_icon(t, "bathroom"), 'MESH_UVSPHERE'))
             col.prop(props, "tub_freestanding")
             if not props.tub_freestanding:
                 col.prop(props, "tub_apron")
@@ -1470,7 +1492,8 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t == 'MIRROR':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Mirror", icon='MOD_MIRROR')
+            col.label(text="Mirror",
+                      **_icon(_item_icon(t, "bathroom"), 'MOD_MIRROR'))
             col.prop(props, "mirror_cabinet")
             if not props.mirror_cabinet:
                 col.prop(props, "mirror_frame")
@@ -1480,13 +1503,15 @@ class ARCHIFORGE_PT_bathroom(Panel):
         if t == 'ELECTRIC_SHOWER':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Ducha (CO)", icon='DRAG_HANDLE')
+            col.label(text="Ducha (CO)",
+                      **_icon(_item_icon(t, "bathroom"), 'DRAG_HANDLE'))
             col.prop(props, "ducha_level")
 
         if t == 'TOWEL_RAIL':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Towel Rail", icon='DRIVER')
+            col.label(text="Towel Rail",
+                      **_icon(_item_icon(t, "bathroom"), 'DRIVER'))
             col.prop(props, "towel_bars")
             col.prop(props, "towel_enable")
             col.prop(props, "rail_electric")

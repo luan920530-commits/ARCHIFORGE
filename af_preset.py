@@ -34,6 +34,18 @@ from bpy.props  import (
     PointerProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -448,14 +460,14 @@ class ARCHIFORGE_OT_preset_save(Operator):
         desc     = settings.preset_description.strip()
 
         if not name:
-            self.report({'WARNING'}, "Enter a preset name")
+            self.report({'WARNING'}, _tr("Enter a preset name"))
             return {'CANCELLED'}
 
         obj      = context.active_object
         prop_key = AF_TYPE_TO_PROP.get(af_type)
 
         if obj is None or prop_key is None or not hasattr(obj, prop_key):
-            self.report({'WARNING'}, f"Active object is not a {af_type}")
+            self.report({'WARNING'}, _tr("Active object is not a {}").format(af_type))
             return {'CANCELLED'}
 
         prop_group = getattr(obj, prop_key)
@@ -466,7 +478,7 @@ class ARCHIFORGE_OT_preset_save(Operator):
             "props"      : props_data,
         })
         _refresh_preset_list(context, af_type)
-        self.report({'INFO'}, f"Preset saved: {os.path.basename(path)}")
+        self.report({'INFO'}, _tr("Preset saved: {}").format(os.path.basename(path)))
         return {'FINISHED'}
 
 
@@ -484,7 +496,7 @@ class ARCHIFORGE_OT_preset_load(Operator):
         items    = settings.items
 
         if idx < 0 or idx >= len(items):
-            self.report({'WARNING'}, "No preset selected")
+            self.report({'WARNING'}, _tr("No preset selected"))
             return {'CANCELLED'}
 
         item     = items[idx]
@@ -492,7 +504,7 @@ class ARCHIFORGE_OT_preset_load(Operator):
         prop_key = AF_TYPE_TO_PROP.get(af_type)
 
         if obj is None or prop_key is None or not hasattr(obj, prop_key):
-            self.report({'WARNING'}, f"Active object is not a {af_type}")
+            self.report({'WARNING'}, _tr("Active object is not a {}").format(af_type))
             return {'CANCELLED'}
 
         prop_group = getattr(obj, prop_key)
@@ -506,20 +518,20 @@ class ARCHIFORGE_OT_preset_load(Operator):
                 bp = bp_list[builtin_count]
                 _apply_props(prop_group, bp["props"])
             else:
-                self.report({'ERROR'}, "Built-in preset not found")
+                self.report({'ERROR'}, _tr("Built-in preset not found"))
                 return {'CANCELLED'}
         else:
             if not os.path.isfile(item.file_path):
-                self.report({'ERROR'}, f"File not found: {item.file_path}")
+                self.report({'ERROR'}, _tr("File not found: {}").format(item.file_path))
                 return {'CANCELLED'}
             try:
                 data = _load_preset_file(item.file_path)
                 _apply_props(prop_group, data.get("props", {}))
             except Exception as e:
-                self.report({'ERROR'}, f"Could not load preset: {e}")
+                self.report({'ERROR'}, _tr("Could not load preset: {}").format(e))
                 return {'CANCELLED'}
 
-        self.report({'INFO'}, f"Preset applied: {item.label}")
+        self.report({'INFO'}, _tr("Preset applied: {}").format(item.label))
         return {'FINISHED'}
 
 
@@ -536,19 +548,19 @@ class ARCHIFORGE_OT_preset_delete(Operator):
         items    = settings.items
 
         if idx < 0 or idx >= len(items):
-            self.report({'WARNING'}, "No preset selected")
+            self.report({'WARNING'}, _tr("No preset selected"))
             return {'CANCELLED'}
 
         item = items[idx]
         if item.is_builtin:
-            self.report({'WARNING'}, "Cannot delete built-in presets")
+            self.report({'WARNING'}, _tr("Cannot delete built-in presets"))
             return {'CANCELLED'}
 
         if os.path.isfile(item.file_path):
             os.remove(item.file_path)
-            self.report({'INFO'}, f"Deleted: {item.label}")
+            self.report({'INFO'}, _tr("Deleted: {}").format(item.label))
         else:
-            self.report({'WARNING'}, "File not found")
+            self.report({'WARNING'}, _tr("File not found"))
 
         _refresh_preset_list(context, settings.active_type)
         return {'FINISHED'}
@@ -564,7 +576,7 @@ class ARCHIFORGE_OT_preset_refresh(Operator):
     def execute(self, context):
         settings = context.scene.af_presets
         _refresh_preset_list(context, settings.active_type)
-        self.report({'INFO'}, "Presets reloaded")
+        self.report({'INFO'}, _tr("Presets reloaded"))
         return {'FINISHED'}
 
 
@@ -593,11 +605,11 @@ class ARCHIFORGE_OT_preset_export(Operator):
             return {'CANCELLED'}
         item = settings.items[idx]
         if not item.file_path or not os.path.isfile(item.file_path):
-            self.report({'ERROR'}, "No file to export")
+            self.report({'ERROR'}, _tr("No file to export"))
             return {'CANCELLED'}
         import shutil
         shutil.copy2(item.file_path, self.filepath)
-        self.report({'INFO'}, f"Exported to: {self.filepath}")
+        self.report({'INFO'}, _tr("Exported to: {}").format(self.filepath))
         return {'FINISHED'}
 
 
@@ -616,7 +628,7 @@ class ARCHIFORGE_OT_preset_import(Operator):
 
     def execute(self, context):
         if not os.path.isfile(self.filepath):
-            self.report({'ERROR'}, "File not found")
+            self.report({'ERROR'}, _tr("File not found"))
             return {'CANCELLED'}
         try:
             data    = _load_preset_file(self.filepath)
@@ -626,9 +638,9 @@ class ARCHIFORGE_OT_preset_import(Operator):
             _refresh_preset_list(
                 context, context.scene.af_presets.active_type
             )
-            self.report({'INFO'}, f"Imported: {name}")
+            self.report({'INFO'}, _tr("Imported: {}").format(name))
         except Exception as e:
-            self.report({'ERROR'}, f"Import failed: {e}")
+            self.report({'ERROR'}, _tr("Import failed: {}").format(e))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -651,7 +663,7 @@ class ARCHIFORGE_PT_presets(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='ASSET_MANAGER')
+        self.layout.label(text="", **_icon("preset", 'ASSET_MANAGER'))
 
     def draw(self, context):
         layout   = self.layout
@@ -675,7 +687,7 @@ class ARCHIFORGE_PT_presets(Panel):
         row = col.row()
         row.label(
             text=f"Presets ({len(settings.items)})",
-            icon='ASSET_MANAGER'
+            **_icon("preset", 'ASSET_MANAGER')
         )
         row.operator(
             "archiforge.preset_refresh",

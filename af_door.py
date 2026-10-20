@@ -54,6 +54,18 @@ from bpy.props import (
 from . import af_autoboolean
 from . import af_material
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -547,7 +559,15 @@ class AF_DoorGenerator:
         hh  = p.handle_height
         ho  = p.handle_offset
         mi  = p.mat_handle
-        hx  = (w - ho) if p.hinge_side == 'LEFT' else ho
+        # Handle position is measured from the free edge, not the hinge.
+        # Match the leaf's local coordinates (including the construction gap),
+        # so RIGHT-hinged leaves keep their handle on the opposite/free stile.
+        gap = 0.003
+        if p.door_type in ('SINGLE', 'POCKET'):
+            leaf_w = w - gap * 2
+            hx = (leaf_w + gap - ho) if p.hinge_side == 'LEFT' else (gap + ho)
+        else:
+            hx = (w - ho) if p.hinge_side == 'LEFT' else ho
         hy  = off
 
         if p.handle_type == 'LEVER':
@@ -745,7 +765,7 @@ class ARCHIFORGE_OT_door(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Door", icon='MESH_PLANE')
+        col.label(text="New Door", **_icon("door", 'MESH_PLANE'))
         col.prop(self, "door_type")
         col.separator()
         col.prop(self, "width")
@@ -773,11 +793,12 @@ class ARCHIFORGE_OT_door(Operator):
                 height      = self.height,
             )
             if result['wall']:
-                self.report({'INFO'}, f"Door → boolean en '{result['wall'].name}'")
+                self.report({'INFO'}, _tr("Door → boolean en '{}'")
+                                      .format(result['wall'].name))
             else:
-                self.report({'INFO'}, "Door created (no wall found)")
+                self.report({'INFO'}, _tr("Door created (no wall found)"))
         else:
-            self.report({'INFO'}, f"Door created: {obj.name}")
+            self.report({'INFO'}, _tr("Door created: {}").format(obj.name))
 
         return {'FINISHED'}
 
@@ -806,18 +827,18 @@ class ARCHIFORGE_OT_door_place(Operator):
 
     def invoke(self, context, event):
         context.window_manager.modal_handler_add(self)
-        self.report({'INFO'}, "Click on a wall to place the door (ESC to cancel)")
+        self.report({'INFO'}, _tr("Click on a wall to place the door (ESC to cancel)"))
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
         if event.type in {'ESC', 'RIGHTMOUSE'}:
-            self.report({'INFO'}, "Placement cancelled")
+            self.report({'INFO'}, _tr("Placement cancelled"))
             return {'CANCELLED'}
 
         if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
             hit = self._raycast_wall(context, event)
             if hit is None:
-                self.report({'WARNING'}, "Click on a wall surface")
+                self.report({'WARNING'}, _tr("Click on a wall surface"))
                 return {'RUNNING_MODAL'}
 
             wall_obj, hit_loc, hit_normal = hit
@@ -903,9 +924,9 @@ class ARCHIFORGE_OT_door_place(Operator):
         )
 
         if result['wall']:
-            self.report({'INFO'}, f"Door placed on '{wall_obj.name}'")
+            self.report({'INFO'}, _tr("Door placed on '{}'").format(wall_obj.name))
         else:
-            self.report({'INFO'}, "Door placed (boolean failed)")
+            self.report({'INFO'}, _tr("Door placed (boolean failed)"))
 
 
 class ARCHIFORGE_OT_door_update(Operator):
@@ -927,7 +948,7 @@ class ARCHIFORGE_OT_door_update(Operator):
         obj   = context.active_object
         props = obj.archiforge_door
         _rebuild_door_mesh(obj, props)
-        self.report({'INFO'}, "Door updated")
+        self.report({'INFO'}, _tr("Door updated"))
         return {'FINISHED'}
 
 
@@ -1005,9 +1026,9 @@ class ARCHIFORGE_OT_door_apply_boolean(Operator):
 
         if result['success']:
             wall_name = result['wall'].name if result['wall'] else "none"
-            self.report({'INFO'}, f"✅ Boolean applied to '{wall_name}'")
+            self.report({'INFO'}, _tr("✅ Boolean applied to '{}'").format(wall_name))
         else:
-            self.report({'WARNING'}, "⚠️  Could not apply boolean")
+            self.report({'WARNING'}, _tr("⚠️  Could not apply boolean"))
 
         return {'FINISHED'}
 
@@ -1034,7 +1055,7 @@ class ARCHIFORGE_PT_door(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("door", 'MESH_PLANE'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -1138,10 +1159,10 @@ class ARCHIFORGE_PT_door(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Boolean", icon='MOD_BOOLEAN')
+        col.label(text="Boolean", **_icon("boolean", 'MOD_BOOLEAN'))
         col.prop(props, "auto_boolean")
         col.operator("archiforge.door_apply_boolean",
-                     text="Apply Boolean Now", icon='MOD_BOOLEAN')
+                     text="Apply Boolean Now", **_icon("boolean", 'MOD_BOOLEAN'))
 
         layout.separator()
         layout.operator(

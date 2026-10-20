@@ -29,6 +29,23 @@ from bpy.props import (
     PointerProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+try:
+    from . import af_material_procedural as _procedural
+except ImportError:  # pragma: no cover - fuera del paquete
+    _procedural = None
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES — Catálogo de materiales base de ArchiForge
@@ -39,27 +56,42 @@ AF_MATERIALS_CATALOG = {
 
     # ── Muros / Concreto ─────────────────────────────────────
     "AF.Wall.Default"    : {"color": (0.90, 0.90, 0.90, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Wall"},
-    "AF.Wall.Concrete"   : {"color": (0.65, 0.65, 0.65, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Wall"},
-    "AF.Wall.Brick"      : {"color": (0.70, 0.35, 0.25, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Wall"},
-    "AF.Wall.Plaster"    : {"color": (0.95, 0.92, 0.88, 1.0), "rough": 0.85, "metal": 0.0, "cat": "Wall"},
+    "AF.Wall.Concrete"   : {"color": (0.65, 0.65, 0.65, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Wall",
+                            "proc": "CONCRETE"},
+    "AF.Wall.Brick"      : {"color": (0.70, 0.35, 0.25, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Wall",
+                            "proc": "BRICK"},
+    "AF.Wall.Block"      : {"color": (0.62, 0.60, 0.58, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Wall",
+                            "proc": "BRICK", "proc_params": {"brick_width": 0.39, "row_height": 0.19,
+                                                             "mortar_size": 0.012, "color_variation": 0.9}},
+    "AF.Wall.Plaster"    : {"color": (0.95, 0.92, 0.88, 1.0), "rough": 0.85, "metal": 0.0, "cat": "Wall",
+                            "proc": "PLASTER"},
     "AF.Wall.Base"       : {"color": (0.80, 0.75, 0.70, 1.0), "rough": 0.8,  "metal": 0.0, "cat": "Wall"},
     "AF.Wall.Top"        : {"color": (0.92, 0.88, 0.84, 1.0), "rough": 0.75, "metal": 0.0, "cat": "Wall"},
 
     # ── Pisos ────────────────────────────────────────────────
-    "AF.Floor.Wood"      : {"color": (0.55, 0.35, 0.18, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Floor"},
-    "AF.Floor.Tile"      : {"color": (0.85, 0.82, 0.80, 1.0), "rough": 0.2,  "metal": 0.0, "cat": "Floor"},
-    "AF.Floor.Marble"    : {"color": (0.95, 0.93, 0.91, 1.0), "rough": 0.05, "metal": 0.0, "cat": "Floor"},
-    "AF.Floor.Concrete"  : {"color": (0.60, 0.60, 0.60, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Floor"},
-    "AF.Floor.Carpet"    : {"color": (0.45, 0.40, 0.55, 1.0), "rough": 1.0,  "metal": 0.0, "cat": "Floor"},
+    "AF.Floor.Wood"      : {"color": (0.55, 0.35, 0.18, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Floor",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'Y'}},
+    "AF.Floor.Tile"      : {"color": (0.85, 0.82, 0.80, 1.0), "rough": 0.2,  "metal": 0.0, "cat": "Floor",
+                            "proc": "CERAMIC"},
+    "AF.Floor.Marble"    : {"color": (0.95, 0.93, 0.91, 1.0), "rough": 0.05, "metal": 0.0, "cat": "Floor",
+                            "proc": "MARBLE"},
+    "AF.Floor.Concrete"  : {"color": (0.60, 0.60, 0.60, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Floor",
+                            "proc": "CONCRETE"},
+    "AF.Floor.Carpet"    : {"color": (0.45, 0.40, 0.55, 1.0), "rough": 1.0,  "metal": 0.0, "cat": "Floor",
+                            "proc": "FABRIC"},
 
     # ── Techos / Losas ───────────────────────────────────────
-    "AF.Roof.Tile"       : {"color": (0.55, 0.28, 0.18, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Roof"},
+    "AF.Roof.Tile"       : {"color": (0.55, 0.28, 0.18, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Roof",
+                            "proc": "CLAY"},
     "AF.Roof.Metal"      : {"color": (0.60, 0.62, 0.65, 1.0), "rough": 0.3,  "metal": 0.9, "cat": "Roof"},
-    "AF.Roof.Concrete"   : {"color": (0.62, 0.62, 0.62, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Roof"},
-    "AF.Slab.Default"    : {"color": (0.75, 0.75, 0.75, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Roof"},
+    "AF.Roof.Concrete"   : {"color": (0.62, 0.62, 0.62, 1.0), "rough": 0.95, "metal": 0.0, "cat": "Roof",
+                            "proc": "CONCRETE"},
+    "AF.Slab.Default"    : {"color": (0.75, 0.75, 0.75, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Roof",
+                            "proc": "CONCRETE"},
 
     # ── Puertas ──────────────────────────────────────────────
-    "AF.Door.Wood"       : {"color": (0.42, 0.26, 0.12, 1.0), "rough": 0.65, "metal": 0.0, "cat": "Door"},
+    "AF.Door.Wood"       : {"color": (0.42, 0.26, 0.12, 1.0), "rough": 0.65, "metal": 0.0, "cat": "Door",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'X'}},
     "AF.Door.Glass"      : {"color": (0.70, 0.85, 0.90, 0.3), "rough": 0.02, "metal": 0.0, "cat": "Door"},
     "AF.Door.Metal"      : {"color": (0.55, 0.55, 0.60, 1.0), "rough": 0.25, "metal": 0.85,"cat": "Door"},
     "AF.Door.Frame"      : {"color": (0.85, 0.82, 0.78, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Door"},
@@ -71,18 +103,30 @@ AF_MATERIALS_CATALOG = {
     "AF.Window.Frame.Al" : {"color": (0.75, 0.78, 0.80, 1.0), "rough": 0.2,  "metal": 0.8, "cat": "Window"},
 
     # ── Escaleras ────────────────────────────────────────────
-    "AF.Stair.Wood"      : {"color": (0.45, 0.28, 0.14, 1.0), "rough": 0.65, "metal": 0.0, "cat": "Stair"},
-    "AF.Stair.Concrete"  : {"color": (0.65, 0.65, 0.65, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Stair"},
+    "AF.Stair.Wood"      : {"color": (0.45, 0.28, 0.14, 1.0), "rough": 0.65, "metal": 0.0, "cat": "Stair",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'Y'}},
+    "AF.Stair.Concrete"  : {"color": (0.65, 0.65, 0.65, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Stair",
+                            "proc": "CONCRETE"},
     "AF.Stair.Metal"     : {"color": (0.60, 0.62, 0.65, 1.0), "rough": 0.3,  "metal": 0.9, "cat": "Stair"},
     "AF.Stair.Rail"      : {"color": (0.55, 0.55, 0.58, 1.0), "rough": 0.2,  "metal": 0.9, "cat": "Stair"},
 
     # ── Cercas ───────────────────────────────────────────────
-    "AF.Fence.Wood"      : {"color": (0.38, 0.22, 0.10, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Fence"},
+    "AF.Fence.Wood"      : {"color": (0.38, 0.22, 0.10, 1.0), "rough": 0.9,  "metal": 0.0, "cat": "Fence",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'X'}},
     "AF.Fence.Metal"     : {"color": (0.25, 0.25, 0.28, 1.0), "rough": 0.4,  "metal": 0.8, "cat": "Fence"},
 
     # ── Truss / Estructura ───────────────────────────────────
     "AF.Truss.Metal"     : {"color": (0.50, 0.52, 0.55, 1.0), "rough": 0.35, "metal": 0.9, "cat": "Truss"},
-    "AF.Truss.Wood"      : {"color": (0.42, 0.26, 0.12, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Truss"},
+    "AF.Truss.Wood"      : {"color": (0.42, 0.26, 0.12, 1.0), "rough": 0.7,  "metal": 0.0, "cat": "Truss",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'X'}},
+
+    # ── Room Asset Library ───────────────────────────────────
+    "AF.Room.Wood"       : {"color": (0.38, 0.23, 0.13, 1.0), "rough": 0.58, "metal": 0.0,  "cat": "Room",
+                            "proc": "WOOD", "proc_params": {"bands_direction": 'X'}},
+    "AF.Room.Fabric"     : {"color": (0.68, 0.61, 0.53, 1.0), "rough": 0.82, "metal": 0.0,  "cat": "Room",
+                            "proc": "FABRIC"},
+    "AF.Room.Metal"      : {"color": (0.20, 0.23, 0.25, 1.0), "rough": 0.30, "metal": 0.72, "cat": "Room"},
+    "AF.Room.Accent"     : {"color": (0.20, 0.43, 0.35, 1.0), "rough": 0.55, "metal": 0.0,  "cat": "Room"},
 }
 
 # Categorías disponibles para el filtro de la UI
@@ -96,6 +140,7 @@ AF_MATERIAL_CATEGORIES = [
     ('STAIR',  "Stair",   "Stair materials"),
     ('FENCE',  "Fence",   "Fence materials"),
     ('TRUSS',  "Truss",   "Truss materials"),
+    ('ROOM',   "Room Assets", "Furniture and decor materials"),
 ]
 
 
@@ -159,6 +204,113 @@ def _create_principled_material(name, color, roughness, metallic):
     return mat
 
 
+def procedural_materials_enabled():
+    """Preferencia *Procedural Materials* (True si no hay preferencias)."""
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        return bool(getattr(prefs, "procedural_materials", True))
+    except Exception:  # noqa: BLE001 - sin preferencias (background)
+        return True
+
+
+def _set_socket(node, key, value):
+    try:
+        node.inputs[key].default_value = value
+        return True
+    except (KeyError, IndexError, TypeError, AttributeError, ValueError):
+        return False
+
+
+def _build_recipe_nodes(node_tree, recipe):
+    """Materializa una receta de ``af_material_procedural`` en ``node_tree``."""
+    nodes = node_tree.nodes
+    links = node_tree.links
+    nodes.clear()
+    created = {}
+    for spec in recipe["nodes"]:
+        node = nodes.new(spec["type"])
+        node.location = spec.get("loc", (0, 0))
+        if spec.get("name"):
+            node.name = spec["name"]
+            node.label = spec["name"]
+        for attr, value in spec.get("props", {}).items():
+            try:
+                setattr(node, attr, value)
+            except (AttributeError, TypeError, ValueError):
+                pass
+        for key, value in spec.get("inputs", {}).items():
+            _set_socket(node, key, value)
+        stops = spec.get("ramp")
+        if stops and hasattr(node, "color_ramp"):
+            elements = node.color_ramp.elements
+            while len(elements) > 1:
+                elements.remove(elements[-1])
+            elements[0].position = stops[0][0]
+            elements[0].color = stops[0][1]
+            for position, color in stops[1:]:
+                element = elements.new(position)
+                element.color = color
+        created[spec["id"]] = node
+    for src, out, dst, inp in recipe["links"]:
+        try:
+            links.new(created[src].outputs[out], created[dst].inputs[inp])
+        except (KeyError, IndexError, RuntimeError, AttributeError):
+            pass
+    return created
+
+
+def _create_recipe_material(name, spec, recipe):
+    """Crea/actualiza un material procedural; cae al plano si algo falla."""
+    mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+    mat.use_nodes = True
+    try:
+        _build_recipe_nodes(mat.node_tree, recipe)
+    except Exception as err:  # noqa: BLE001 - versión de Blender sin el nodo
+        print("[ArchiForge] procedural material '{}' failed ({}); "
+              "using flat colour".format(name, err))
+        return _create_principled_material(
+            name, spec["color"], spec["rough"], spec["metal"])
+    color = tuple(spec["color"])
+    alpha = color[3] if len(color) == 4 else 1.0
+    bsdf = mat.node_tree.nodes.get(_procedural.BSDF_NODE_NAME)
+    if alpha < 1.0 and bsdf is not None:
+        _set_socket(bsdf, "Alpha", alpha)
+        mat.blend_method = 'BLEND'
+        mat.shadow_method = 'CLIP'
+    else:
+        mat.blend_method = 'OPAQUE'
+        mat.shadow_method = 'OPAQUE'
+    mat["af_material"] = True
+    mat["af_category"] = spec.get("cat", "")
+    mat["af_procedural"] = spec.get("proc", "")
+    mat.diffuse_color = color
+    mat.roughness = float(spec["rough"])
+    mat.metallic = float(spec["metal"])
+    return mat
+
+
+def create_catalog_material(name, spec=None):
+    """Crea o actualiza el material ``name`` según el catálogo.
+
+    Usa la receta procedural del catálogo cuando la preferencia está
+    activa; de lo contrario (o si la receta no existe) un Principled plano.
+    """
+    spec = spec or AF_MATERIALS_CATALOG[name]
+    kind = spec.get("proc")
+    if kind and _procedural is not None and procedural_materials_enabled():
+        recipe = _procedural.build_recipe(
+            kind, spec["color"], spec["rough"], spec["metal"],
+            spec.get("proc_params"))
+        if recipe is not None:
+            return _create_recipe_material(name, spec, recipe)
+    return _create_principled_material(
+        name      = name,
+        color     = spec["color"],
+        roughness = spec["rough"],
+        metallic  = spec["metal"],
+    )
+
+
 def ensure_af_material(name):
     """
     Asegura que un material de ArchiForge existe en la escena.
@@ -172,13 +324,7 @@ def ensure_af_material(name):
         print(f"[ArchiForge] ⚠️  Material '{name}' no está en el catálogo")
         return None
 
-    spec = AF_MATERIALS_CATALOG[name]
-    return _create_principled_material(
-        name      = name,
-        color     = spec["color"],
-        roughness = spec["rough"],
-        metallic  = spec["metal"],
-    )
+    return create_catalog_material(name)
 
 
 def ensure_af_materials_for_object(obj, material_names):
@@ -219,14 +365,23 @@ def rebuild_all_af_materials():
     """
     count = 0
     for name, spec in AF_MATERIALS_CATALOG.items():
-        _create_principled_material(
-            name      = name,
-            color     = spec["color"],
-            roughness = spec["rough"],
-            metallic  = spec["metal"],
-        )
+        create_catalog_material(name, spec)
         count += 1
     print(f"[ArchiForge] ✅ {count} materiales reconstruidos")
+    return count
+
+
+def refresh_existing_af_materials():
+    """Regenera solo los materiales del catálogo ya presentes en el archivo.
+
+    Se usa al cambiar la preferencia *Procedural Materials* para que el
+    archivo abierto refleje el modo elegido sin crear materiales nuevos.
+    """
+    count = 0
+    for name, spec in AF_MATERIALS_CATALOG.items():
+        if name in bpy.data.materials:
+            create_catalog_material(name, spec)
+            count += 1
     return count
 
 
@@ -385,7 +540,8 @@ class ARCHIFORGE_OT_create_all_materials(Operator):
 
     def execute(self, context):
         count = rebuild_all_af_materials()
-        self.report({'INFO'}, f"✅ {count} ArchiForge materials created/updated")
+        self.report({'INFO'}, _tr("✅ {} ArchiForge materials created/updated")
+                              .format(count))
         return {'FINISHED'}
 
 
@@ -421,7 +577,8 @@ class ARCHIFORGE_OT_assign_material(Operator):
         mat = ensure_af_material(self.material_name)
 
         if mat is None:
-            self.report({'ERROR'}, f"Material '{self.material_name}' not found")
+            self.report({'ERROR'}, _tr("Material '{}' not found")
+                                   .format(self.material_name))
             return {'CANCELLED'}
 
         me = obj.data
@@ -434,7 +591,7 @@ class ARCHIFORGE_OT_assign_material(Operator):
 
         self.report(
             {'INFO'},
-            f"Assigned '{self.material_name}' to slot {self.slot_index}"
+            _tr("Assigned '{}' to slot {}").format(self.material_name, self.slot_index)
         )
         return {'FINISHED'}
 
@@ -462,7 +619,8 @@ class ARCHIFORGE_OT_assign_from_catalog(Operator):
         mat = ensure_af_material(self.material_name)
 
         if mat is None:
-            self.report({'ERROR'}, f"Could not create material '{self.material_name}'")
+            self.report({'ERROR'}, _tr("Could not create material '{}'")
+                                   .format(self.material_name))
             return {'CANCELLED'}
 
         # — Usar slot activo de Blender —
@@ -474,7 +632,7 @@ class ARCHIFORGE_OT_assign_from_catalog(Operator):
 
         me.materials[slot_idx] = mat
 
-        self.report({'INFO'}, f"✅ '{self.material_name}' assigned")
+        self.report({'INFO'}, _tr("✅ '{}' assigned").format(self.material_name))
         return {'FINISHED'}
 
 
@@ -507,16 +665,10 @@ class ARCHIFORGE_OT_reset_materials(Operator):
             if slot and slot.get("af_material", False):
                 name = slot.name
                 if name in AF_MATERIALS_CATALOG:
-                    spec = AF_MATERIALS_CATALOG[name]
-                    _create_principled_material(
-                        name      = name,
-                        color     = spec["color"],
-                        roughness = spec["rough"],
-                        metallic  = spec["metal"],
-                    )
+                    create_catalog_material(name)
                     count += 1
 
-        self.report({'INFO'}, f"Reset {count} materials")
+        self.report({'INFO'}, _tr("Reset {} materials").format(count))
         return {'FINISHED'}
 
 
@@ -536,7 +688,7 @@ class ARCHIFORGE_OT_clean_unused_materials(Operator):
                 bpy.data.materials.remove(mat)
                 removed += 1
 
-        self.report({'INFO'}, f"Removed {removed} unused AF materials")
+        self.report({'INFO'}, _tr("Removed {} unused AF materials").format(removed))
         return {'FINISHED'}
 
 
@@ -558,11 +710,11 @@ class ARCHIFORGE_OT_load_material_library(Operator):
 
     def execute(self, context):
         if not os.path.isfile(self.filepath):
-            self.report({'ERROR'}, f"File not found: {self.filepath}")
+            self.report({'ERROR'}, _tr("File not found: {}").format(self.filepath))
             return {'CANCELLED'}
 
         if not self.filepath.endswith(".blend"):
-            self.report({'ERROR'}, "File must be a .blend file")
+            self.report({'ERROR'}, _tr("File must be a .blend file"))
             return {'CANCELLED'}
 
         # — Cargar materiales del .blend externo —
@@ -574,10 +726,11 @@ class ARCHIFORGE_OT_load_material_library(Operator):
                 ]
 
             count = len([m for m in bpy.data.materials if m.name.startswith("AF.")])
-            self.report({'INFO'}, f"✅ Loaded {count} AF materials from library")
+            self.report({'INFO'}, _tr("✅ Loaded {} AF materials from library")
+                                  .format(count))
 
         except Exception as e:
-            self.report({'ERROR'}, f"Error loading library: {e}")
+            self.report({'ERROR'}, _tr("Error loading library: {}").format(e))
             return {'CANCELLED'}
 
         return {'FINISHED'}
@@ -603,7 +756,7 @@ class ARCHIFORGE_PT_materials(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MATERIAL')
+        self.layout.label(text="", **_icon("material", 'MATERIAL'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -705,7 +858,7 @@ class ARCHIFORGE_PT_materials(Panel):
         row.operator(
             "archiforge.create_all_materials",
             text="Build All",
-            icon='MATERIAL',
+            **_icon("material_library", 'MATERIAL'),
         )
         row.operator(
             "archiforge.reset_materials",

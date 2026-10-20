@@ -44,6 +44,21 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 
 AF_ELECTRICAL_PROP = "archiforge_electrical"
 AF_ELEC_VERSION = 3  # v2.1: detalles con transform
@@ -348,7 +363,7 @@ class AF_ElectricalProperties(PropertyGroup):
         update=af_electrical_update,
     )
     panel_recessed : BoolProperty(
-        name="Recessed", default=True, update=af_electrical_update,
+        name="Recessed in Wall", default=True, update=af_electrical_update,
     )
 
     # ── Luz real de Blender ─────────────────────────────────
@@ -1395,7 +1410,8 @@ class ARCHIFORGE_OT_electrical(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Electrical Item", icon='PLUGIN')
+        col.label(text="New Electrical Item",
+                  **_icon(_item_icon(self.item_type, "electrical"), 'PLUGIN'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -1427,7 +1443,7 @@ class ARCHIFORGE_OT_electrical(Operator):
             _SUSPEND = False
         _rebuild_electrical_mesh(obj, props, sync_light=True,
                                  context=context)
-        self.report({'INFO'}, f"Electrical item created: {obj.name}")
+        self.report({'INFO'}, _tr("Electrical item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1448,7 +1464,7 @@ class ARCHIFORGE_OT_electrical_update(Operator):
         obj = context.active_object
         _rebuild_electrical_mesh(obj, obj.archiforge_electrical,
                                  sync_light=True, context=context)
-        self.report({'INFO'}, "Electrical item updated")
+        self.report({'INFO'}, _tr("Electrical item updated"))
         return {'FINISHED'}
 
 
@@ -1470,7 +1486,7 @@ class ARCHIFORGE_OT_electrical_reset(Operator):
         props = obj.archiforge_electrical
         _apply_type_defaults(props, props.item_type)
         _rebuild_electrical_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset to defaults")
+        self.report({'INFO'}, _tr("Dimensions reset to defaults"))
         return {'FINISHED'}
 
 
@@ -1496,9 +1512,9 @@ class ARCHIFORGE_OT_electrical_light(Operator):
         _ensure_light_object(context, obj, props, gen.light_local,
                              gen.light_kind)
         if _get_light_obj(props) is not None:
-            self.report({'INFO'}, "Light synced")
+            self.report({'INFO'}, _tr("Light synced"))
         else:
-            self.report({'INFO'}, "Light removed/hidden")
+            self.report({'INFO'}, _tr("Light removed/hidden"))
         return {'FINISHED'}
 
 
@@ -1520,7 +1536,7 @@ class ARCHIFORGE_PT_electrical(Panel):
                 and obj.archiforge_electrical.is_af_electrical)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='PLUGIN')
+        self.layout.label(text="", **_icon("electrical", 'PLUGIN'))
 
     def draw(self, context):
         props = context.active_object.archiforge_electrical
@@ -1531,7 +1547,8 @@ class ARCHIFORGE_PT_electrical(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "electrical"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -1562,7 +1579,8 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t in ('OUTLET', 'SWITCH', 'DATA'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Plate", icon='MESH_PLANE')
+            col.label(text="Plate",
+                      **_icon(_item_icon(t, "electrical"), 'MESH_PLANE'))
             col.prop(props, "gangs")
             if props.gangs > 1:
                 col.prop(props, "plate_orientation", text="")
@@ -1573,7 +1591,8 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t == 'OUTLET':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Socket", icon='PLUGIN')
+            col.label(text="Socket",
+                      **_icon(_item_icon(t, "electrical"), 'PLUGIN'))
             col.prop(props, "socket_standard", text="")
             col.prop(props, "outlet_switched")
             if props.socket_standard == 'CO':
@@ -1582,14 +1601,16 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t == 'SWITCH':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Switch", icon='TOGGLE')
+            col.label(text="Switch",
+                      **_icon(_item_icon(t, "electrical"), 'TOGGLE'))
             col.prop(props, "switch_type", text="")
             col.prop(props, "switch_led")
 
         if t in ('BULB', 'PENDANT'):
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Hanging", icon='DRIVER')
+            col.label(text="Hanging",
+                      **_icon(_item_icon(t, "electrical"), 'DRIVER'))
             col.prop(props, "cable_enable")
             col.prop(props, "canopy_enable")
             col.prop(props, "socket_type", text="")
@@ -1603,14 +1624,16 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t == 'CEILING_LIGHT':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Ceiling", icon='LIGHT')
+            col.label(text="Ceiling",
+                      **_icon(_item_icon(t, "electrical"), 'LIGHT'))
             col.prop(props, "ceiling_style", text="")
             col.prop(props, "lens_enable")
 
         if t == 'DOWNLIGHT':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Downlight", icon='LIGHT_SPOT')
+            col.label(text="Downlight",
+                      **_icon(_item_icon(t, "electrical"), 'LIGHT_SPOT'))
             col.prop(props, "trim_style", text="")
             if props.trim_style == 'ADJUSTABLE':
                 col.prop(props, "downlight_tilt")
@@ -1620,13 +1643,15 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t == 'SCONCE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Sconce", icon='LIGHT')
+            col.label(text="Sconce",
+                      **_icon(_item_icon(t, "electrical"), 'LIGHT'))
             col.prop(props, "sconce_style", text="")
 
         if t == 'PANEL_BOARD':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Panel Board", icon='PACKAGE')
+            col.label(text="Panel Board",
+                      **_icon(_item_icon(t, "electrical"), 'PACKAGE'))
             col.prop(props, "panel_rows")
             col.prop(props, "panel_modules")
             col.prop(props, "panel_door", text="")
@@ -1635,7 +1660,7 @@ class ARCHIFORGE_PT_electrical(Panel):
         if t in LUMINOUS_TYPES:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Real Light", icon='LIGHT')
+            col.label(text="Real Light", **_icon("bulb", 'LIGHT'))
             col.prop(props, "create_light")
             col.prop(props, "light_power")
             col.prop(props, "light_color", text="")

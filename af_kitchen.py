@@ -25,6 +25,21 @@ from bpy.props import (
 from . import af_material
 from .af_objects_base import AF_ObjectBuilder
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 
 AF_KIT_PROP = "archiforge_kitchen"
 AF_KIT_VERSION = 1
@@ -733,7 +748,8 @@ class ARCHIFORGE_OT_kitchen(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Kitchen Item", icon='MESH_CUBE')
+        col.label(text="New Kitchen Item",
+                  **_icon(_item_icon(self.item_type, "kitchen"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -758,7 +774,7 @@ class ARCHIFORGE_OT_kitchen(Operator):
         finally:
             _SUSPEND = False
         _rebuild_kitchen_mesh(obj, props)
-        self.report({'INFO'}, f"Kitchen item created: {obj.name}")
+        self.report({'INFO'}, _tr("Kitchen item created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -778,7 +794,7 @@ class ARCHIFORGE_OT_kitchen_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_kitchen_mesh(obj, obj.archiforge_kitchen)
-        self.report({'INFO'}, "Kitchen item updated")
+        self.report({'INFO'}, _tr("Kitchen item updated"))
         return {'FINISHED'}
 
 
@@ -800,7 +816,7 @@ class ARCHIFORGE_OT_kitchen_reset(Operator):
         props = obj.archiforge_kitchen
         _apply_type_defaults(props, props.item_type)
         _rebuild_kitchen_mesh(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 
@@ -821,7 +837,7 @@ class ARCHIFORGE_PT_kitchen(Panel):
                 and obj.archiforge_kitchen.is_af_kitchen)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("kitchen", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_kitchen
@@ -832,7 +848,8 @@ class ARCHIFORGE_PT_kitchen(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "kitchen"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -848,14 +865,16 @@ class ARCHIFORGE_PT_kitchen(Panel):
         if t == 'FRIDGE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Fridge", icon='MESH_CUBE')
+            col.label(text="Fridge",
+                      **_icon(_item_icon(t, "kitchen"), 'MESH_CUBE'))
             col.prop(props, "dispenser")
             col.prop(props, "display_on")
 
         if t == 'STOVE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Stove", icon='MESH_CUBE')
+            col.label(text="Stove",
+                      **_icon(_item_icon(t, "kitchen"), 'MESH_CUBE'))
             col.prop(props, "burners")
             col.prop(props, "oven_window")
             col.prop(props, "display_on")
@@ -863,34 +882,39 @@ class ARCHIFORGE_PT_kitchen(Panel):
         if t == 'RANGE_HOOD':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Hood", icon='LIGHT_HEM')
+            col.label(text="Hood",
+                      **_icon(_item_icon(t, "kitchen"), 'LIGHT_HEM'))
             col.prop(props, "hood_lights")
             col.prop(props, "display_on")
 
         if t == 'SINK_CABINET':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Sink", icon='SPHERE')
+            col.label(text="Sink",
+                      **_icon(_item_icon(t, "kitchen"), 'SPHERE'))
             col.prop(props, "sink_bowls")
             col.prop(props, "faucet_pro")
 
         if t == 'DISHWASHER':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Dishwasher", icon='MESH_CUBE')
+            col.label(text="Dishwasher",
+                      **_icon(_item_icon(t, "kitchen"), 'MESH_CUBE'))
             col.prop(props, "door_open")
             col.prop(props, "display_on")
 
         if t == 'MICROWAVE':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Microwave", icon='MESH_CUBE')
+            col.label(text="Microwave",
+                      **_icon(_item_icon(t, "kitchen"), 'MESH_CUBE'))
             col.prop(props, "display_on")
 
         if t == 'UTENSILS':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Utensils", icon='MESH_CUBE')
+            col.label(text="Utensils",
+                      **_icon(_item_icon(t, "kitchen"), 'MESH_CUBE'))
             col.prop(props, "tools")
             col.prop(props, "board")
             col.prop(props, "kettle")

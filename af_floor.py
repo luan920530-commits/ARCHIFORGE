@@ -27,7 +27,11 @@
 #
 #  Características:
 #  - Dimensiones globales configurables
-#  - Junta (grout) entre piezas
+#  - Formatos comerciales de baldosa (30x30, 45x45, 60x60, 60x120 cm)
+#    como tamaño inicial editable
+#  - Junta (grout) entre piezas: plana, elevada o retraída en REGULAR y
+#    OFFSET (los demás patrones solo dejan la separación)
+#  - Losa base opcional debajo de las piezas
 #  - Espesor y bisel de cada pieza
 #  - Borde perimetral (border trim)
 #  - Generación desde curva o contorno manual
@@ -58,12 +62,43 @@ from bpy.props import (
 )
 
 from . import af_material
+from .af_construction_presets import (
+    CUSTOM_PRESET,
+    preset_for_tile_size,
+    tile_preset_dimensions,
+    tile_preset_items,
+)
+from .af_floor_geometry import (
+    GROUT_GEOMETRY_PATTERNS,
+    clip_polygon_to_outline,
+    fragments_cover_polygon,
+    grout_joint_thickness,
+    normalize_outline,
+    polygon_area,
+    polygon_boundary_edges,
+    split_polygon_edges,
+    triangulate_polygon,
+)
+from .af_outline_draw import AF_OutlineDrawMixin
+
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
 
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
 # ════════════════════════════════════════════════════════════
 AF_FLOOR_PROP = "archiforge_floor"
+_FLOOR_UPDATE_SUSPENDED = False
 
 AF_FLOOR_PATTERNS = [
     ('REGULAR',      "Regular",       "Aligned square/rect tiles",       'MESH_GRID',     0),
@@ -92,15 +127,26 @@ AF_BORDER_STYLES = [
 ]
 
 AF_GROUT_STYLES = [
-    ('FLAT',   "Flat",   "Flat flush grout"),
-    ('RAISED', "Raised", "Slightly raised grout lines"),
-    ('RECESSED',"Recessed","Recessed / concave grout"),
+    ('FLAT',    "Flat",     "Joint flush with the tile surface"),
+    ('RAISED',  "Raised",   "Joint stands Grout Depth above the tiles"),
+    ('RECESSED',"Recessed", "Joint sits Grout Depth below the tiles"),
 ]
+
+# Commercial tile formats (editable starting sizes, see
+# af_construction_presets.py).
+AF_TILE_PRESETS = tile_preset_items()
 
 
 # ════════════════════════════════════════════════════════════
 #  PROPERTYGROUP
 # ════════════════════════════════════════════════════════════
+class AF_FloorVertex(PropertyGroup):
+    """One XY point in a floor's saved custom outline."""
+
+    x : FloatProperty(name="X", default=0.0, unit='LENGTH')
+    y : FloatProperty(name="Y", default=0.0, unit='LENGTH')
+
+
 class AF_FloorProperties(PropertyGroup):
 
     is_af_floor : BoolProperty(
@@ -139,6 +185,14 @@ class AF_FloorProperties(PropertyGroup):
     )
 
     # ── Dimensiones de la pieza ────────────────────────────────
+    tile_preset : EnumProperty(
+        name        = "Tile Format",
+        description = ("Commercial tile format used as an editable starting "
+                       "size; switches back to Custom when the size is edited"),
+        items       = AF_TILE_PRESETS,
+        default     = CUSTOM_PRESET,
+        update      = lambda s, c: af_floor_tile_preset_update(s, c),
+    )
     tile_width : FloatProperty(
         name        = "Tile Width",
         description = "Width of each tile/plank",
@@ -146,7 +200,7 @@ class AF_FloorProperties(PropertyGroup):
         min         = 0.02,
         max         = 5.0,
         unit        = 'LENGTH',
-        update      = lambda s, c: af_floor_update(s, c),
+        update      = lambda s, c: af_floor_tile_size_update(s, c),
     )
     tile_depth : FloatProperty(
         name        = "Tile Depth",
@@ -155,7 +209,7 @@ class AF_FloorProperties(PropertyGroup):
         min         = 0.02,
         max         = 5.0,
         unit        = 'LENGTH',
-        update      = lambda s, c: af_floor_update(s, c),
+        update      = lambda s, c: af_floor_tile_size_update(s, c),
     )
     tile_thickness : FloatProperty(
         name        = "Tile Thickness",
@@ -391,6 +445,17 @@ class AF_FloorProperties(PropertyGroup):
         update      = lambda s, c: af_floor_update(s, c),
     )
 
+    # ── Contorno poligonal opcional ──────────────────────────
+    outline_vertices : CollectionProperty(
+        name="Outline", type=AF_FloorVertex,
+    )
+    outline_enabled : BoolProperty(
+        name="Use Custom Outline", default=False, options={'HIDDEN'},
+    )
+    source_curve : StringProperty(
+        name="Source Curve", default="", options={'HIDDEN'},
+    )
+
     # ── Origen ────────────────────────────────────────────────
     origin_center : BoolProperty(
         name        = "Center Origin",
@@ -432,14 +497,127 @@ class AF_FloorGenerator:
             self.ox = 0.0
             self.oy = 0.0
 
+        # The optional base slab occupies 0..base_thickness; every piece,
+        # joint and border is laid on top of it instead of inside it.
+        self.z_lift = p.base_thickness if p.base_enable else 0.0
+
+        self.outline = []
+        self._outline_triangles = []
+        self._pattern_rotation_active = False
+        if p.outline_enabled and len(p.outline_vertices) >= 3:
+            try:
+                raw_outline = normalize_outline([
+                    (vertex.x, vertex.y) for vertex in p.outline_vertices
+                ])
+                self.outline = [
+                    (x + self.ox, y + self.oy) for x, y in raw_outline
+                ]
+                self._outline_triangles = triangulate_polygon(self.outline)
+            except ValueError:
+                # Keep legacy rectangular floors editable if saved outline
+                # data is incomplete or was manually corrupted.
+                self.outline = []
+                self._outline_triangles = []
+
+    def _rotate_pattern_points(self, points):
+        if not self._pattern_rotation_active:
+            return points
+        angle = float(self.props.pattern_rotation)
+        if abs(angle) <= 0.001:
+            return points
+        if self.props.origin_center:
+            cx = cy = 0.0
+        else:
+            cx = self.props.width * 0.5
+            cy = self.props.depth * 0.5
+        cosa = math.cos(angle)
+        sina = math.sin(angle)
+        return [
+            (cx + (x - cx) * cosa - (y - cy) * sina,
+             cy + (x - cx) * sina + (y - cy) * cosa)
+            for x, y in points
+        ]
+
+    def _add_prism_fragments(self, fragments, z0, z1, mi):
+        """Create a closed prism from clipped convex fragments."""
+        split_fragments = split_polygon_edges(fragments)
+        vertices = {}
+
+        def get_vert(x, y, z):
+            key = (round(float(x), 9), round(float(y), 9), round(float(z), 9))
+            vert = vertices.get(key)
+            if vert is None:
+                vert = self.bm.verts.new(Vector((x, y, z)))
+                vertices[key] = vert
+            return vert
+
+        for fragment in split_fragments:
+            if abs(polygon_area(fragment)) < 1e-9:
+                continue
+            top = [get_vert(x, y, z1) for x, y in fragment]
+            bottom = [get_vert(x, y, z0) for x, y in fragment]
+            try:
+                face = self.bm.faces.new(top)
+                face[self._mat] = mi
+            except Exception:
+                pass
+            try:
+                face = self.bm.faces.new(list(reversed(bottom)))
+                face[self._mat] = mi
+            except Exception:
+                pass
+
+        for start, end in polygon_boundary_edges(split_fragments):
+            try:
+                bottom_start = get_vert(start[0], start[1], z0)
+                bottom_end = get_vert(end[0], end[1], z0)
+                top_end = get_vert(end[0], end[1], z1)
+                top_start = get_vert(start[0], start[1], z1)
+                face = self.bm.faces.new(
+                    [bottom_start, bottom_end, top_end, top_start])
+                face[self._mat] = mi
+            except Exception:
+                pass
+
+    def _clip_shape_to_outline(self, points, z0, z1, mi):
+        """Clip a tile to a custom concave outline; return False if unchanged."""
+        if not self.outline:
+            return False
+        fragments = clip_polygon_to_outline(
+            points, self.outline, self._outline_triangles)
+        if not fragments:
+            return True
+        if fragments_cover_polygon(fragments, points):
+            if (self._pattern_rotation_active
+                    and abs(self.props.pattern_rotation) > 0.001):
+                self._add_prism_fragments([points], z0, z1, mi)
+                return True
+            return False
+        self._add_prism_fragments(fragments, z0, z1, mi)
+        return True
+
+    def _border_inset(self):
+        """The rectangular border pattern is not valid for custom outlines."""
+        if self.outline or not self.props.border_enable:
+            return 0.0
+        return self.props.border_width
+
+    def _joint_thickness(self):
+        """Height of the grout prisms for the selected grout style."""
+        p = self.props
+        return grout_joint_thickness(
+            p.grout_style, p.tile_thickness, p.grout_depth)
+
     # ────────────────────────────────────────────────────────
     #  UTILIDADES
     # ────────────────────────────────────────────────────────
-    def _tile(self, x0, y0, tw, td, thick, mi=0, bevel=0.0):
+    def _tile(self, x0, y0, tw, td, thick, mi=0, bevel=0.0, z_base=None):
         """
         Genera una baldosa/pieza en la posición (x0,y0)
         con dimensiones tw×td y espesor thick.
         Si bevel > 0, aplica un bisel en los bordes superiores.
+        Las piezas se apoyan sobre la losa base (z_lift) salvo que se
+        indique un z_base explícito.
         """
         bm  = self.bm
         mat = self._mat
@@ -450,10 +628,16 @@ class AF_FloorGenerator:
         y0 += oy
         x1  = x0 + tw
         y1  = y0 + td
-        z0  = 0.0
-        z1  = thick
+        z0  = self.z_lift if z_base is None else z_base
+        z1  = z0 + thick
 
         if tw < 0.001 or td < 0.001 or thick < 0.001:
+            return
+
+        subject = self._rotate_pattern_points([
+            (x0, y0), (x1, y0), (x1, y1), (x0, y1),
+        ])
+        if self._clip_shape_to_outline(subject, z0, z1, mi):
             return
 
         if bevel > 0.001 and bevel < tw * 0.4 and bevel < td * 0.4:
@@ -542,8 +726,8 @@ class AF_FloorGenerator:
         oy   = self.oy
         cosa = math.cos(angle)
         sina = math.sin(angle)
-        z0   = 0.0
-        z1   = thick
+        z0   = self.z_lift
+        z1   = z0 + thick
 
         hw = tw * 0.5
         hd = td * 0.5
@@ -562,6 +746,14 @@ class AF_FloorGenerator:
             ))
 
         corners = [rot(v) for v in local]
+        corners = [
+            Vector(point) for point in self._rotate_pattern_points(
+                [(corner.x, corner.y) for corner in corners]
+            )
+        ]
+        if self._clip_shape_to_outline(
+                [(corner.x, corner.y) for corner in corners], z0, z1, mi):
+            return
 
         vb = [bm.verts.new(Vector((c.x, c.y, z0))) for c in corners]
         vt = [bm.verts.new(Vector((c.x, c.y, z1))) for c in corners]
@@ -591,8 +783,8 @@ class AF_FloorGenerator:
         mat = self._mat
         ox  = self.ox
         oy  = self.oy
-        z0  = 0.0
-        z1  = thick
+        z0  = self.z_lift
+        z1  = z0 + thick
         segs = 6
 
         base_angle = 0.0 if flat_top else math.radians(30)
@@ -604,6 +796,15 @@ class AF_FloorGenerator:
                 cx + ox + r * math.cos(a),
                 cy + oy + r * math.sin(a),
             )))
+
+        pts = [
+            Vector(point) for point in self._rotate_pattern_points(
+                [(point.x, point.y) for point in pts]
+            )
+        ]
+        if self._clip_shape_to_outline(
+                [(point.x, point.y) for point in pts], z0, z1, mi):
+            return
 
         vb = [bm.verts.new(Vector((p.x, p.y, z0))) for p in pts]
         vt = [bm.verts.new(Vector((p.x, p.y, z1))) for p in pts]
@@ -623,27 +824,25 @@ class AF_FloorGenerator:
             except Exception:
                 pass
 
-    def _grout_line_h(self, x0, x1, y, gw, gd, mi):
-        """Línea de junta horizontal."""
+    def _grout_line_h(self, x0, x1, y, gw, mi):
+        """Línea de junta horizontal (altura según grout_style)."""
         if gw < 0.0001:
             return
-        p = self.props
         self._tile(
             x0 - self.ox, y - gw * 0.5 - self.oy,
             x1 - x0, gw,
-            gd if gd > 0.001 else p.tile_thickness,
+            self._joint_thickness(),
             mi
         )
 
-    def _grout_line_v(self, y0, y1, x, gw, gd, mi):
-        """Línea de junta vertical."""
+    def _grout_line_v(self, y0, y1, x, gw, mi):
+        """Línea de junta vertical (altura según grout_style)."""
         if gw < 0.0001:
             return
-        p = self.props
         self._tile(
             x - gw * 0.5 - self.ox, y0 - self.oy,
             gw, y1 - y0,
-            gd if gd > 0.001 else p.tile_thickness,
+            self._joint_thickness(),
             mi
         )
 
@@ -658,7 +857,7 @@ class AF_FloorGenerator:
         bt = p.base_thickness
         w  = p.width
         d  = p.depth
-        self._tile(0, 0, w, d, bt, p.mat_base)
+        self._tile(0, 0, w, d, bt, p.mat_base, z_base=0.0)
 
     # ────────────────────────────────────────────────────────
     #  BORDE PERIMETRAL
@@ -666,7 +865,7 @@ class AF_FloorGenerator:
     def _build_border(self):
         """Genera el borde perimetral del piso."""
         p  = self.props
-        if not p.border_enable:
+        if not p.border_enable or self.outline:
             return
 
         bw = p.border_width
@@ -714,7 +913,7 @@ class AF_FloorGenerator:
         d   = p.depth
 
         # Área interior (dejando espacio para el borde si aplica)
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         x_s  = bw + ox
         y_s  = bw + oy
         x_e  = w - bw
@@ -741,15 +940,16 @@ class AF_FloorGenerator:
 
                 self._tile(x0, y0, tw_clip, td_clip, tt, mi, bev)
 
-        # — Juntas —
+        # — Juntas — (flush / raised / recessed según grout_style)
         if gw > 0.0001:
+            jt = self._joint_thickness()
             # Horizontales
             for row in range(n_rows):
                 y_grout = y_s + (row + 1) * step_y - gw
                 if y_s <= y_grout <= y_e:
                     self._tile(
                         bw, y_grout, w - bw*2, gw,
-                        max(tt - p.grout_depth, 0.001),
+                        jt,
                         mi_g
                     )
             # Verticales
@@ -758,7 +958,7 @@ class AF_FloorGenerator:
                 if x_s <= x_grout <= x_e:
                     self._tile(
                         x_grout, bw, gw, d - bw*2,
-                        max(tt - p.grout_depth, 0.001),
+                        jt,
                         mi_g
                     )
 
@@ -783,7 +983,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         x_s  = bw + ox
         y_s  = bw + oy
@@ -811,13 +1011,13 @@ class AF_FloorGenerator:
                     continue
                 self._tile(x0_c, y0, tw_c, td_c, tt, mi, bev)
 
-        # Juntas
+        # Juntas (flush / raised / recessed según grout_style)
         if gw > 0.0001:
+            jt = self._joint_thickness()
             for row in range(n_rows):
                 yg = y_s + (row + 1) * step_y - gw
                 if y_s <= yg < y_e:
-                    self._tile(bw, yg, w - bw*2, gw,
-                               max(tt - p.grout_depth, 0.001), mi_g)
+                    self._tile(bw, yg, w - bw*2, gw, jt, mi_g)
             for col in range(n_cols + 1):
                 for row in range(n_rows):
                     row_off = (off * step_x) if row % 2 == 1 else 0.0
@@ -825,8 +1025,7 @@ class AF_FloorGenerator:
                     y0 = y_s + row * step_y
                     y1 = min(y0 + td, y_e)
                     if x_s <= xg < x_e and y0 < y_e:
-                        self._tile(xg, y0, gw, y1 - y0,
-                                   max(tt - p.grout_depth, 0.001), mi_g)
+                        self._tile(xg, y0, gw, y1 - y0, jt, mi_g)
 
     # ────────────────────────────────────────────────────────
     #  PATTERN: HERRINGBONE
@@ -847,7 +1046,7 @@ class AF_FloorGenerator:
         a    = p.herringbone_angle
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         ox   = p.offset_x
         oy   = p.offset_y
 
@@ -894,7 +1093,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         # La celda del parquet es cuadrada
         plank_w = p.tile_width  / nb
@@ -948,7 +1147,7 @@ class AF_FloorGenerator:
         gw   = p.grout_width
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         ox   = p.offset_x
         oy   = p.offset_y
 
@@ -982,7 +1181,7 @@ class AF_FloorGenerator:
         ft  = p.hex_flat_top
         w   = p.width
         d   = p.depth
-        bw  = p.border_width if p.border_enable else 0.0
+        bw  = self._border_inset()
         ox  = p.offset_x
         oy  = p.offset_y
 
@@ -1028,7 +1227,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
 
         # Celda = 2×tw + gw × 2×td + gw
         cell_w = 2 * tw + gw
@@ -1069,7 +1268,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         lmin = p.plank_length_min
         lmax = p.plank_length_max
         off  = p.offset_row
@@ -1130,7 +1329,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         seed = p.plank_random_seed
 
         rng  = random.Random(seed)
@@ -1195,7 +1394,7 @@ class AF_FloorGenerator:
         oy   = p.offset_y
         w    = p.width
         d    = p.depth
-        bw   = p.border_width if p.border_enable else 0.0
+        bw   = self._border_inset()
         smin = p.cobble_size_min
         smax = p.cobble_size_max
         seed = p.cobble_seed
@@ -1240,13 +1439,13 @@ class AF_FloorGenerator:
         """Genera el patrón completo."""
         p = self.props
 
-        # 1) Base
+        # 1) Base y borde conservan el contorno dibujado sin rotación.
         self._build_base()
-
-        # 2) Borde
         self._build_border()
 
-        # 3) Patrón principal
+        # 2) Patrón principal. En contornos personalizados, la rotación se
+        # aplica a cada pieza antes de recortarla, no al límite del suelo.
+        self._pattern_rotation_active = bool(self.outline)
         dispatch = {
             'REGULAR'     : self._build_regular,
             'OFFSET'      : self._build_offset,
@@ -1263,9 +1462,11 @@ class AF_FloorGenerator:
         builder = dispatch.get(p.pattern)
         if builder:
             builder()
+        self._pattern_rotation_active = False
 
-        # 4) Rotación global del patrón
-        if abs(p.pattern_rotation) > 0.001:
+        # 3) Conserva el comportamiento legacy rectangular. Los contornos
+        # personalizados ya rotaron cada baldosa antes del recorte.
+        if not self.outline and abs(p.pattern_rotation) > 0.001:
             rot = Matrix.Rotation(p.pattern_rotation, 4, 'Z')
             cx  = p.width  * 0.5
             cy  = p.depth  * 0.5
@@ -1298,6 +1499,8 @@ def _find_floor_object(props):
 
 
 def af_floor_update(self, context):
+    if _FLOOR_UPDATE_SUSPENDED:
+        return
     obj = _find_floor_object(self)
     if obj is None:
         obj = context.active_object
@@ -1307,6 +1510,34 @@ def af_floor_update(self, context):
     if props is None or not props.is_af_floor:
         return
     _rebuild_floor_mesh(obj, props)
+
+
+def af_floor_tile_preset_update(self, context):
+    """Apply a commercial tile format as the new (editable) tile size."""
+    global _FLOOR_UPDATE_SUSPENDED
+    dims = tile_preset_dimensions(self.tile_preset)
+    if dims is None:
+        # CUSTOM keeps whatever size the user typed.
+        return
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        self.tile_width, self.tile_depth = dims
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
+    af_floor_update(self, context)
+
+
+def af_floor_tile_size_update(self, context):
+    """Manual size edits fall back to Custom once they leave the preset."""
+    if _FLOOR_UPDATE_SUSPENDED:
+        return
+    expected = preset_for_tile_size(
+        self.tile_preset, self.tile_width, self.tile_depth)
+    if expected != self.tile_preset:
+        # Assigning CUSTOM does not rebuild (no dimensions to apply).
+        self.tile_preset = expected
+    af_floor_update(self, context)
 
 
 def _rebuild_floor_mesh(obj, props):
@@ -1339,18 +1570,61 @@ def _setup_floor_materials(obj):
     af_material.ensure_af_materials_for_object(obj, mat_names)
 
 
-def _create_floor_object(context, name="AF_Floor"):
-    me  = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, me)
-    context.collection.objects.link(obj)
-    context.view_layer.objects.active = obj
-    obj.select_set(True)
+def _set_floor_outline(props, points):
+    """Store a validated world-space path as an object-local CCW outline."""
+    global _FLOOR_UPDATE_SUSPENDED
+    coords = normalize_outline(
+        points, min_segment_length=0.01, max_vertices=64)
+    triangulate_polygon(coords)
+    xs = [point[0] for point in coords]
+    ys = [point[1] for point in coords]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    width, depth = x1 - x0, y1 - y0
+    if width < 0.10 or depth < 0.10:
+        raise ValueError("El contorno debe medir al menos 0.10 m en X e Y")
 
-    props              = obj.archiforge_floor
-    props.is_af_floor  = True
-    props.object_name  = obj.name
-    _setup_floor_materials(obj)
-    return obj, props
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        while len(props.outline_vertices) > len(coords):
+            props.outline_vertices.remove(len(props.outline_vertices) - 1)
+        while len(props.outline_vertices) < len(coords):
+            props.outline_vertices.add()
+        for vertex, point in zip(props.outline_vertices, coords):
+            vertex.x = point[0] - x0
+            vertex.y = point[1] - y0
+        props.width = width
+        props.depth = depth
+        props.origin_center = False
+        props.border_enable = False
+        props.outline_enabled = True
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
+
+    return (x0, y0), width, depth
+
+
+def _create_floor_object(context, name="AF_Floor"):
+    mesh = bpy.data.meshes.new(name)
+    obj = None
+    try:
+        obj = bpy.data.objects.new(name, mesh)
+        context.collection.objects.link(obj)
+        context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        props = obj.archiforge_floor
+        props.is_af_floor = True
+        props.object_name = obj.name
+        _setup_floor_materials(obj)
+        return obj, props
+    except Exception:
+        if obj is not None and obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh.users == 0 and mesh.name in bpy.data.meshes:
+            bpy.data.meshes.remove(mesh)
+        raise
 
 
 # ════════════════════════════════════════════════════════════
@@ -1371,12 +1645,22 @@ class ARCHIFORGE_OT_floor(Operator):
     depth : FloatProperty(
         name="Depth", default=3.0, min=0.1, unit='LENGTH',
     )
+    tile_preset : EnumProperty(
+        name="Tile Format", items=AF_TILE_PRESETS, default=CUSTOM_PRESET,
+        description="Commercial tile format (editable afterwards)",
+    )
     tile_width : FloatProperty(
         name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
     )
     tile_depth : FloatProperty(
         name="Tile Depth", default=0.60, min=0.02, unit='LENGTH',
     )
+
+    def _tile_size(self):
+        dims = tile_preset_dimensions(self.tile_preset)
+        if dims is None:
+            return self.tile_width, self.tile_depth
+        return dims
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -1385,18 +1669,22 @@ class ARCHIFORGE_OT_floor(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Floor Pattern", icon='MESH_GRID')
+        col.label(text="New Floor Pattern", **_icon("floor", 'MESH_GRID'))
         col.prop(self, "pattern")
         col.separator()
         col.prop(self, "width")
         col.prop(self, "depth")
         col.separator()
-        col.prop(self, "tile_width")
-        col.prop(self, "tile_depth")
+        col.prop(self, "tile_preset")
+        size = col.column(align=True)
+        size.enabled = self.tile_preset == CUSTOM_PRESET
+        size.prop(self, "tile_width")
+        size.prop(self, "tile_depth")
 
         # Info — número aprox de piezas
-        n_x = max(1, int(self.width / self.tile_width))
-        n_y = max(1, int(self.depth / self.tile_depth))
+        tile_w, tile_d = self._tile_size()
+        n_x = max(1, int(self.width / max(tile_w, 0.01)))
+        n_y = max(1, int(self.depth / max(tile_d, 0.01)))
         col.separator()
         col.label(
             text=f"≈ {n_x * n_y} tiles ({n_x}×{n_y})",
@@ -1406,14 +1694,78 @@ class ARCHIFORGE_OT_floor(Operator):
     def execute(self, context):
         bpy.ops.object.select_all(action='DESELECT')
         obj, props = _create_floor_object(context, "AF_Floor")
+        tile_w, tile_d = self._tile_size()
         props.pattern    = self.pattern
         props.width      = self.width
         props.depth      = self.depth
-        props.tile_width = self.tile_width
-        props.tile_depth = self.tile_depth
+        props.tile_width = tile_w
+        props.tile_depth = tile_d
+        props.tile_preset = self.tile_preset
         _rebuild_floor_mesh(obj, props)
-        self.report({'INFO'}, f"Floor created: {obj.name}")
+        self.report({'INFO'}, _tr("Floor created: {}").format(obj.name))
         return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_floor_draw(AF_OutlineDrawMixin, Operator):
+    """Draw a closed custom outline for a parametric floor pattern."""
+    bl_idname = "archiforge.floor_draw"
+    bl_label = "Draw Floor Outline"
+    bl_description = (
+        "Click the floor perimeter vertices, then click the first point or "
+        "press C/Enter to close"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+    outline_tool_label = "Floor"
+
+    pattern : EnumProperty(
+        name="Pattern", items=AF_FLOOR_PATTERNS, default='REGULAR',
+    )
+    tile_width : FloatProperty(
+        name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
+    )
+    tile_depth : FloatProperty(
+        name="Tile Depth", default=0.60, min=0.02, unit='LENGTH',
+    )
+
+    def _create_from_outline(self, context, points):
+        return create_floor_from_outline(
+            context, points, z=self._draw_z, pattern=self.pattern,
+            tile_width=self.tile_width, tile_depth=self.tile_depth)
+
+
+def create_floor_from_outline(context, points, z=0.0, pattern='REGULAR',
+                              tile_width=0.60, tile_depth=0.60,
+                              tile_preset=CUSTOM_PRESET, name="AF_Floor"):
+    """Create a floor from a closed XY outline (world coordinates).
+
+    Shared by the viewport draw tool and the combined sets. Raises
+    ``ValueError`` for an invalid outline and removes the object if the
+    mesh rebuild fails.
+    """
+    global _FLOOR_UPDATE_SUSPENDED
+    obj = None
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        obj, props = _create_floor_object(context, name)
+        origin, _, _ = _set_floor_outline(props, points)
+        obj.location = (origin[0], origin[1], float(z))
+        props.pattern = pattern
+        props.tile_width = tile_width
+        props.tile_depth = tile_depth
+        props.tile_preset = tile_preset
+        props.source_curve = ""
+        _rebuild_floor_mesh(obj, props)
+        return obj
+    except Exception:
+        if obj is not None and obj.name in bpy.data.objects:
+            mesh = obj.data if obj.type == 'MESH' else None
+            bpy.data.objects.remove(obj, do_unlink=True)
+            if mesh is not None and mesh.users == 0:
+                bpy.data.meshes.remove(mesh)
+        raise
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
 
 
 class ARCHIFORGE_OT_floor_update(Operator):
@@ -1433,7 +1785,7 @@ class ARCHIFORGE_OT_floor_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_floor_mesh(obj, obj.archiforge_floor)
-        self.report({'INFO'}, "Floor updated")
+        self.report({'INFO'}, _tr("Floor updated"))
         return {'FINISHED'}
 
 
@@ -1484,7 +1836,7 @@ class ARCHIFORGE_OT_floor_from_wall(Operator):
         props.tile_depth = self.tile_width
         obj.location     = Vector((min(xs), min(ys), 0.0))
         _rebuild_floor_mesh(obj, props)
-        self.report({'INFO'}, f"Floor from wall '{wall.name}'")
+        self.report({'INFO'}, _tr("Floor from wall '{}'").format(wall.name))
         return {'FINISHED'}
 
 
@@ -1517,36 +1869,56 @@ class ARCHIFORGE_OT_floor_from_curve(Operator):
         col.prop(self, "tile_width")
 
     def execute(self, context):
+        global _FLOOR_UPDATE_SUSPENDED
         curve = context.active_object
-        mw    = curve.matrix_world
-        pts   = []
-        for spline in curve.data.splines:
-            if spline.type == 'BEZIER':
-                for bp in spline.bezier_points:
-                    pts.append(mw @ bp.co)
-            else:
-                for bp in spline.points:
-                    pts.append(mw @ Vector(bp.co[:3]))
-
-        if len(pts) < 2:
-            self.report({'ERROR'}, "Need at least 2 points")
+        if not curve.data.splines:
+            self.report({'ERROR'}, _tr("The curve has no outline spline"))
             return {'CANCELLED'}
 
-        xs = [p.x for p in pts]
-        ys = [p.y for p in pts]
-        w  = max(xs) - min(xs)
-        d  = max(ys) - min(ys)
+        spline = curve.data.splines[0]
+        points = []
+        if spline.type == 'BEZIER':
+            points = [curve.matrix_world @ point.co
+                      for point in spline.bezier_points]
+        else:
+            points = [curve.matrix_world @ Vector(point.co[:3])
+                      for point in spline.points]
+        if len(points) < 3:
+            self.report({'ERROR'}, _tr("Curve outline needs at least 3 points"))
+            return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
-        obj, props = _create_floor_object(context, "AF_Floor")
-        props.pattern    = self.pattern
-        props.width      = max(w, 0.1)
-        props.depth      = max(d, 0.1)
-        props.tile_width = self.tile_width
-        props.tile_depth = self.tile_width
-        obj.location     = Vector((min(xs), min(ys), 0.0))
-        _rebuild_floor_mesh(obj, props)
-        self.report({'INFO'}, f"Floor from curve '{curve.name}'")
+        obj = None
+        previous_suspend = _FLOOR_UPDATE_SUSPENDED
+        _FLOOR_UPDATE_SUSPENDED = True
+        try:
+            obj, props = _create_floor_object(context, "AF_Floor")
+            origin, _, _ = _set_floor_outline(props, points)
+            obj.location = (origin[0], origin[1], min(point.z for point in points))
+            props.pattern = self.pattern
+            props.tile_width = self.tile_width
+            props.tile_depth = self.tile_width
+            props.source_curve = curve.name
+            _rebuild_floor_mesh(obj, props)
+        except ValueError as exc:
+            if obj is not None:
+                mesh = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            self.report({'ERROR'}, _tr(str(exc)))
+            return {'CANCELLED'}
+        except Exception:
+            if obj is not None:
+                mesh = obj.data
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            raise
+        finally:
+            _FLOOR_UPDATE_SUSPENDED = previous_suspend
+
+        self.report({'INFO'}, _tr("Floor from curve '{}'").format(curve.name))
         return {'FINISHED'}
 
 
@@ -1572,7 +1944,7 @@ class ARCHIFORGE_PT_floor(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_GRID')
+        self.layout.label(text="", **_icon("floor", 'MESH_GRID'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_floor
@@ -1585,14 +1957,23 @@ class ARCHIFORGE_PT_floor(Panel):
         col = box.column(align=True)
         col.label(text="Pattern", icon='MODIFIER')
         col.prop(props, "pattern", text="")
-        col.prop(props, "origin_center")
+        origin = col.row()
+        origin.enabled = not props.outline_enabled
+        origin.prop(props, "origin_center")
 
         # ── Área ─────────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
         col.label(text="Area", icon='ARROW_LEFTRIGHT')
-        col.prop(props, "width")
-        col.prop(props, "depth")
+        dimensions = col.column(align=True)
+        dimensions.enabled = not props.outline_enabled
+        dimensions.prop(props, "width")
+        dimensions.prop(props, "depth")
+        if props.outline_enabled:
+            col.label(
+                text=f"Custom outline · {len(props.outline_vertices)} points",
+                icon='MOD_BOOLEAN',
+            )
 
         # Info
         n_x = max(1, int(props.width / max(props.tile_width, 0.01)))
@@ -1606,6 +1987,7 @@ class ARCHIFORGE_PT_floor(Panel):
         box = layout.box()
         col = box.column(align=True)
         col.label(text="Tile / Piece", icon='MESH_PLANE')
+        col.prop(props, "tile_preset", text="Format")
         col.prop(props, "tile_width")
         col.prop(props, "tile_depth")
         col.prop(props, "tile_thickness")
@@ -1666,6 +2048,12 @@ class ARCHIFORGE_PT_floor(Panel):
         col.prop(props, "grout_style")
         col.prop(props, "grout_width")
         col.prop(props, "grout_depth")
+        if props.pattern not in GROUT_GEOMETRY_PATTERNS:
+            col.label(
+                text="Joint prisms only in Regular / Offset; "
+                     "this pattern leaves a gap",
+                icon='INFO',
+            )
 
         # ── Offset / Rotación ─────────────────────────────────
         box = layout.box()
@@ -1678,13 +2066,19 @@ class ARCHIFORGE_PT_floor(Panel):
         # ── Borde ─────────────────────────────────────────────
         box = layout.box()
         row = box.row(align=True)
+        row.enabled = not props.outline_enabled
         row.prop(
             props, "border_enable",
             text="Border",
             icon='TRIA_DOWN' if props.border_enable else 'TRIA_RIGHT',
             toggle=True, emboss=False,
         )
-        if props.border_enable:
+        if props.outline_enabled:
+            box.label(
+                text="Border pattern is available for rectangular floors",
+                icon='INFO',
+            )
+        elif props.border_enable:
             col = box.column(align=True)
             col.prop(props, "border_style")
             col.prop(props, "border_width")
@@ -1725,7 +2119,7 @@ class ARCHIFORGE_PT_floor(Panel):
         row.operator(
             "archiforge.floor_from_wall",
             text="From Wall",
-            icon='SNAP_FACE',
+            **_icon("wall", 'SNAP_FACE'),
         )
 
 
@@ -1733,9 +2127,11 @@ class ARCHIFORGE_PT_floor(Panel):
 #  REGISTRO
 # ════════════════════════════════════════════════════════════
 classes = [
+    AF_FloorVertex,
     AF_FloorProperties,
 
     ARCHIFORGE_OT_floor,
+    ARCHIFORGE_OT_floor_draw,
     ARCHIFORGE_OT_floor_update,
     ARCHIFORGE_OT_floor_from_wall,
     ARCHIFORGE_OT_floor_from_curve,

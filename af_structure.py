@@ -27,6 +27,21 @@ except ImportError:
     af_material = None
     AF_ObjectBuilder = None
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, item_icon as _item_icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+    def _item_icon(item_type, default=None):
+        return default
+
 AF_STRUCT_PROP = "archiforge_struct"
 AF_STRUCT_VERSION = 1
 
@@ -640,7 +655,8 @@ class ARCHIFORGE_OT_structure(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Structural Element", icon='MESH_CUBE')
+        col.label(text="New Structural Element",
+                  **_icon(_item_icon(self.item_type, "structure"), 'MESH_CUBE'))
         col.prop(self, "item_type")
         col.separator()
         col.prop(self, "auto_dimensions")
@@ -666,7 +682,7 @@ class ARCHIFORGE_OT_structure(Operator):
             _SUSPEND = False
         _rebuild_struct_mesh(obj, props)
         _sync_struct_labels(obj, props)
-        self.report({'INFO'}, f"Structure created: {obj.name}")
+        self.report({'INFO'}, _tr("Structure created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -687,7 +703,7 @@ class ARCHIFORGE_OT_structure_update(Operator):
         obj = context.active_object
         _rebuild_struct_mesh(obj, obj.archiforge_struct)
         _sync_struct_labels(obj, obj.archiforge_struct)
-        self.report({'INFO'}, "Structure updated")
+        self.report({'INFO'}, _tr("Structure updated"))
         return {'FINISHED'}
 
 
@@ -710,7 +726,7 @@ class ARCHIFORGE_OT_structure_reset(Operator):
         _apply_type_defaults(props, props.item_type)
         _rebuild_struct_mesh(obj, props)
         _sync_struct_labels(obj, props)
-        self.report({'INFO'}, "Dimensions reset")
+        self.report({'INFO'}, _tr("Dimensions reset"))
         return {'FINISHED'}
 
 
@@ -731,7 +747,7 @@ class ARCHIFORGE_PT_structure(Panel):
                 and obj.archiforge_struct.is_af_struct)
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_CUBE')
+        self.layout.label(text="", **_icon("structure", 'MESH_CUBE'))
 
     def draw(self, context):
         props = context.active_object.archiforge_struct
@@ -742,7 +758,8 @@ class ARCHIFORGE_PT_structure(Panel):
 
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Type", icon='MODIFIER')
+        col.label(text="Type",
+                  **_icon(_item_icon(props.item_type, "structure"), 'MODIFIER'))
         col.prop(props, "item_type", text="")
         col.prop(props, "mesh_quality", text="Quality")
 
@@ -768,7 +785,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'FOOTING':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Footing", icon='MESH_CUBE')
+            col.label(text="Footing",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "footing_base_h")
             col.prop(props, "pedestal")
             col.prop(props, "rebar")
@@ -776,7 +794,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'COLUMN':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Column", icon='MESH_CUBE')
+            col.label(text="Column",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "col_shape", text="")
             col.prop(props, "rebar")
             if props.rebar:
@@ -785,7 +804,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'BEAM':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Beam", icon='MESH_CUBE')
+            col.label(text="Beam",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "rebar")
             if props.rebar:
                 col.prop(props, "stirrup_spacing")
@@ -793,7 +813,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'RIBBED_SLAB':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Ribbed Slab", icon='MESH_CUBE')
+            col.label(text="Ribbed Slab",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "width", text="Span X")
             col.prop(props, "depth", text="Span Y")
             col.prop(props, "joist_w")
@@ -806,7 +827,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'GRID':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Axes", icon='MESH_CUBE')
+            col.label(text="Axes",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "grid_nx")
             col.prop(props, "grid_ny")
             col.prop(props, "grid_sx")
@@ -815,7 +837,8 @@ class ARCHIFORGE_PT_structure(Panel):
         if t == 'LEVELS':
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Levels", icon='MESH_CUBE')
+            col.label(text="Levels",
+                      **_icon(_item_icon(t, "structure"), 'MESH_CUBE'))
             col.prop(props, "n_levels")
             col.prop(props, "h_first")
             col.prop(props, "h_typ")

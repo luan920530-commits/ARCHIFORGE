@@ -53,6 +53,18 @@ from bpy.props import (
 
 from . import af_material
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -1300,7 +1312,7 @@ class ARCHIFORGE_OT_fence(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="New Fence", icon='MESH_PLANE')
+        col.label(text="New Fence", **_icon("fence", 'MESH_PLANE'))
         col.prop(self, "fence_type")
         col.separator()
         col.prop(self, "height")
@@ -1313,7 +1325,7 @@ class ARCHIFORGE_OT_fence(Operator):
         props.height         = self.height
         props.parts[0].length = self.length
         _rebuild_fence_mesh(obj, props)
-        self.report({'INFO'}, f"Fence created: {obj.name}")
+        self.report({'INFO'}, _tr("Fence created: {}").format(obj.name))
         return {'FINISHED'}
 
 
@@ -1334,7 +1346,7 @@ class ARCHIFORGE_OT_fence_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_fence_mesh(obj, obj.archiforge_fence)
-        self.report({'INFO'}, "Fence updated")
+        self.report({'INFO'}, _tr("Fence updated"))
         return {'FINISHED'}
 
 
@@ -1423,7 +1435,7 @@ class ARCHIFORGE_OT_fence_from_curve(Operator):
                     points.append(mw @ Vector(bp.co[:3]))
 
         if len(points) < 2:
-            self.report({'ERROR'}, "Curve needs at least 2 points")
+            self.report({'ERROR'}, _tr("Curve needs at least 2 points"))
             return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
@@ -1456,7 +1468,7 @@ class ARCHIFORGE_OT_fence_from_curve(Operator):
         obj.location = points[0]
 
         _rebuild_fence_mesh(obj, props)
-        self.report({'INFO'}, f"Fence from curve '{curve.name}'")
+        self.report({'INFO'}, _tr("Fence from curve '{}'").format(curve.name))
         return {'FINISHED'}
 
 
@@ -1482,7 +1494,7 @@ class ARCHIFORGE_PT_fence(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("fence", 'MESH_PLANE'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_fence

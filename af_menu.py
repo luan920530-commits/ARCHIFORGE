@@ -12,6 +12,12 @@ import bpy
 from bpy.types import Menu, Operator
 from bpy.props import StringProperty
 
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  MENÚ PRINCIPAL — Shift+A (referenciado desde __init__.py
@@ -27,36 +33,67 @@ class ARCHIFORGE_MT_menu_main(Menu):
         layout.operator_context = 'INVOKE_DEFAULT'
 
         # ── Estructura ────────────────────────────────────────
-        layout.label(text="Structure", icon='MESH_CUBE')
-        layout.operator("archiforge.wall",  text="Wall",  icon='SNAP_EDGE')
-        layout.operator("archiforge.slab",  text="Slab",  icon='MESH_PLANE')
-        layout.operator("archiforge.roof",  text="Roof",  icon='MOD_BUILD')
-        layout.operator("archiforge.truss", text="Truss", icon='MESH_CUBE')
+        layout.label(text="Structure", **_icon("structure", 'MESH_CUBE'))
+        layout.operator("archiforge.wall",  text="Wall",
+                        **_icon("wall", 'SNAP_EDGE'))
+        layout.operator("archiforge.slab",  text="Slab",
+                        **_icon("slab", 'MESH_PLANE'))
+        layout.operator("archiforge.roof",  text="Roof",
+                        **_icon("roof", 'MOD_BUILD'))
+        layout.operator("archiforge.truss", text="Truss",
+                        **_icon("truss", 'MESH_CUBE'))
 
         layout.separator()
 
         # ── Pavimento ─────────────────────────────────────────
-        layout.label(text="Floor", icon='MESH_GRID')
-        layout.operator("archiforge.floor", text="Floor Pattern", icon='MESH_GRID')
+        layout.label(text="Floor", **_icon("floor", 'MESH_GRID'))
+        layout.operator("archiforge.floor", text="Floor Pattern",
+                        **_icon("floor", 'MESH_GRID'))
 
         layout.separator()
 
         # ── Aberturas ─────────────────────────────────────────
-        layout.label(text="Openings", icon='MOD_MIRROR')
-        layout.operator("archiforge.door",   text="Door",   icon='MESH_CUBE')
-        layout.operator("archiforge.window", text="Window", icon='MOD_LATTICE')
+        layout.label(text="Openings", **_icon("opening", 'MOD_MIRROR'))
+        layout.operator("archiforge.door",   text="Door",
+                        **_icon("door", 'MESH_CUBE'))
+        layout.operator("archiforge.window", text="Window",
+                        **_icon("window", 'MOD_LATTICE'))
 
         layout.separator()
 
         # ── Circulación ───────────────────────────────────────
-        layout.label(text="Circulation", icon='EXPORT')
-        layout.operator("archiforge.stair", text="Stair", icon='OBJECT_DATA')
+        layout.label(text="Circulation", **_icon("stair", 'EXPORT'))
+        layout.operator("archiforge.stair", text="Stair",
+                        **_icon("stair", 'OBJECT_DATA'))
 
         layout.separator()
 
         # ── Extras ────────────────────────────────────────────
-        layout.label(text="Extras", icon='PLUS')
-        layout.operator("archiforge.fence", text="Fence", icon='MESH_PLANE')
+        layout.label(text="Extras", **_icon("truss", 'PLUS'))
+        layout.operator("archiforge.fence", text="Fence",
+                        **_icon("fence", 'MESH_PLANE'))
+
+        # ── Conjuntos y anotaciones (v1.12) ───────────────────
+        if hasattr(bpy.types, "ARCHIFORGE_OT_set_bathroom"):
+            layout.separator()
+            layout.label(text="Sets", **_icon("sets", 'HOME'))
+            layout.operator("archiforge.set_bathroom",
+                            text="Complete Bathroom (CO)",
+                            **_icon("set_bathroom", 'SPHERE'))
+            layout.operator("archiforge.set_apartment",
+                            text="Demo Apartment",
+                            **_icon("set_apartment", 'HOME'))
+        if hasattr(bpy.types, "ARCHIFORGE_OT_dimension_selected"):
+            layout.separator()
+            layout.label(text="Annotations",
+                         **_icon("annotation", 'DRIVER_DISTANCE'))
+            layout.operator("archiforge.dimension_selected",
+                            text="Dimension Selected",
+                            **_icon("dimension", 'ARROW_LEFTRIGHT'))
+            layout.operator("archiforge.grid_axes", text="Grid Axes",
+                            **_icon("grid_axes", 'GRID'))
+            layout.operator("archiforge.north_arrow", text="North Arrow",
+                            **_icon("north_arrow", 'ORIENTATION_VIEW'))
 
 
 # ════════════════════════════════════════════════════════════
@@ -85,7 +122,7 @@ class ARCHIFORGE_MT_context_object(Menu):
         layout = self.layout
         obj    = context.active_object
 
-        layout.label(text="ArchiForge", icon='HOME')
+        layout.label(text="ArchiForge", **_icon("archiforge", 'HOME'))
         layout.separator()
 
         # — Detectar tipo y ofrecer el update correcto —
@@ -123,7 +160,7 @@ class ARCHIFORGE_MT_context_object(Menu):
         layout.operator(
             "archiforge.preset_save",
             text="Save as Preset",
-            icon='EXPORT'
+            **_icon("preset", 'EXPORT')
         )
 
 
@@ -139,21 +176,29 @@ class ARCHIFORGE_MT_pie(Menu):
         pie = self.layout.menu_pie()
 
         # West  ←
-        pie.operator("archiforge.wall",  text="Wall",   icon='SNAP_EDGE')
+        pie.operator("archiforge.wall",  text="Wall",
+                     **_icon("wall", 'SNAP_EDGE'))
         # East  →
-        pie.operator("archiforge.floor", text="Floor",  icon='MESH_GRID')
+        pie.operator("archiforge.floor", text="Floor",
+                     **_icon("floor", 'MESH_GRID'))
         # South ↓
-        pie.operator("archiforge.door",  text="Door",   icon='MESH_CUBE')
+        pie.operator("archiforge.door",  text="Door",
+                     **_icon("door", 'MESH_CUBE'))
         # North ↑
-        pie.operator("archiforge.roof",  text="Roof",   icon='MOD_BUILD')
+        pie.operator("archiforge.roof",  text="Roof",
+                     **_icon("roof", 'MOD_BUILD'))
         # NW
-        pie.operator("archiforge.stair", text="Stair",  icon='OBJECT_DATA')
+        pie.operator("archiforge.stair", text="Stair",
+                     **_icon("stair", 'OBJECT_DATA'))
         # NE
-        pie.operator("archiforge.truss", text="Truss",  icon='MESH_CUBE')
+        pie.operator("archiforge.truss", text="Truss",
+                     **_icon("truss", 'MESH_CUBE'))
         # SW
-        pie.operator("archiforge.fence", text="Fence",  icon='MESH_PLANE')
+        pie.operator("archiforge.fence", text="Fence",
+                     **_icon("fence", 'MESH_PLANE'))
         # SE
-        pie.operator("archiforge.window","Window",      icon='MOD_LATTICE')
+        pie.operator("archiforge.window", text="Window",
+                     **_icon("window", 'MOD_LATTICE'))
 
 
 # ════════════════════════════════════════════════════════════
@@ -184,7 +229,7 @@ def _menu_func_add(self, context):
     layout.menu(
         "ARCHIFORGE_MT_menu_main",
         text="ArchiForge",
-        icon='HOME',
+        **_icon("archiforge", 'HOME'),
     )
 
 
@@ -205,7 +250,7 @@ def _menu_func_context(self, context):
         self.layout.menu(
             "ARCHIFORGE_MT_context_object",
             text="ArchiForge",
-            icon='HOME',
+            **_icon("archiforge", 'HOME'),
         )
 
 

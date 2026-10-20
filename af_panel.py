@@ -44,6 +44,25 @@ from bpy.props import (
     FloatProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon, OBJECT_ICONS as _OBJECT_ICONS
+except ImportError:  # pragma: no cover - fuera del paquete
+    _OBJECT_ICONS = {}
+
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
+
+def _type_icon(attr, fallback):
+    """Ícono propio del tipo AF (``archiforge_wall`` → wall.png) o el nativo."""
+    return _icon(_OBJECT_ICONS.get(attr), fallback)
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES — propiedades de cada tipo de objeto AF
@@ -148,7 +167,8 @@ class ARCHIFORGE_OT_preset_menu_invoke(Operator):
                 op = getattr(getattr(bpy.ops, category), name)
                 op('INVOKE_DEFAULT')
         except Exception as e:
-            self.report({'ERROR'}, f"Could not invoke '{self.operator_id}': {e}")
+            self.report({'ERROR'}, _tr("Could not invoke '{}': {}")
+                                   .format(self.operator_id, e))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -420,9 +440,9 @@ class ARCHIFORGE_OT_select_by_type(Operator):
 
         if count:
             label = AF_OBJECT_TYPES.get(attr, ("Unknown",))[0]
-            self.report({'INFO'}, f"Selected {count} {label} object(s)")
+            self.report({'INFO'}, _tr("Selected {} {} object(s)").format(count, label))
         else:
-            self.report({'WARNING'}, "No objects of this type found")
+            self.report({'WARNING'}, _tr("No objects of this type found"))
         return {'FINISHED'}
 
 
@@ -439,7 +459,7 @@ class ARCHIFORGE_OT_select_all_af(Operator):
         for obj, attr, label, icon in _get_af_objects(context.scene):
             obj.select_set(True)
             count += 1
-        self.report({'INFO'}, f"Selected {count} ArchiForge object(s)")
+        self.report({'INFO'}, _tr("Selected {} ArchiForge object(s)").format(count))
         return {'FINISHED'}
 
 
@@ -483,9 +503,9 @@ class ARCHIFORGE_OT_rebuild_all(Operator):
             except Exception as e:
                 errors += 1
 
-        msg = f"Rebuilt {rebuilt} object(s)"
+        msg = _tr("Rebuilt {} object(s)").format(rebuilt)
         if errors:
-            msg += f" | {errors} error(s)"
+            msg += _tr(" | {} error(s)").format(errors)
             self.report({'WARNING'}, msg)
         else:
             self.report({'INFO'}, msg)
@@ -517,7 +537,7 @@ class ARCHIFORGE_OT_isolate_af_type(Operator):
             obj.hide_viewport = not is_af_obj
 
         label = AF_OBJECT_TYPES.get(attr, ("Unknown",))[0]
-        self.report({'INFO'}, f"Isolating: {label} objects")
+        self.report({'INFO'}, _tr("Isolating: {} objects").format(label))
         return {'FINISHED'}
 
 
@@ -531,7 +551,7 @@ class ARCHIFORGE_OT_show_all(Operator):
     def execute(self, context):
         for obj, attr, label, icon in _get_af_objects(context.scene):
             obj.hide_viewport = False
-        self.report({'INFO'}, "All AF objects visible")
+        self.report({'INFO'}, _tr("All AF objects visible"))
         return {'FINISHED'}
 
 
@@ -554,7 +574,7 @@ class ARCHIFORGE_PT_object_info(Panel):
     def draw_header(self, context):
         info = _detect_af_type(context.active_object)
         if info:
-            self.layout.label(text="", icon=info[2])
+            self.layout.label(text="", **_type_icon(info[0], info[2]))
 
     def draw(self, context):
         obj    = context.active_object
@@ -573,7 +593,7 @@ class ARCHIFORGE_PT_object_info(Panel):
         box = layout.box()
         col = box.column(align=True)
         row = col.row(align=True)
-        row.label(text=f"{label}", icon=icon)
+        row.label(text=f"{label}", **_type_icon(attr, icon))
         row.label(text=obj.name, icon='OBJECT_DATA')
 
         # ── Dimensiones del bounding box ─────────────────────
@@ -653,7 +673,7 @@ class ARCHIFORGE_PT_scene(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SCENE_DATA')
+        self.layout.label(text="", **_icon("scene", 'SCENE_DATA'))
 
     def draw(self, context):
         layout = self.layout
@@ -679,7 +699,7 @@ class ARCHIFORGE_PT_scene(Panel):
             if n == 0:
                 continue
             row = col.row(align=True)
-            row.label(text=f"  {label}:", icon=icon)
+            row.label(text=f"  {label}:", **_type_icon(attr, icon))
             row.label(text=str(n))
             sub = row.row(align=True)
             sub.scale_x = 0.7
@@ -699,7 +719,7 @@ class ARCHIFORGE_PT_scene(Panel):
         layout.separator(factor=0.3)
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Actions", icon='TOOL_SETTINGS')
+        col.label(text="Actions", **_icon("tools", 'TOOL_SETTINGS'))
 
         row = col.row(align=True)
         row.operator(
@@ -731,7 +751,7 @@ class ARCHIFORGE_PT_scene(Panel):
                 row = col.row(align=True)
                 icon_sel = 'RESTRICT_SELECT_OFF' \
                     if obj.select_get() else 'RESTRICT_SELECT_ON'
-                row.label(text=obj.name, icon=icon)
+                row.label(text=obj.name, **_type_icon(attr, icon))
                 row.label(text=label)
                 sub = row.row(align=True)
                 sub.scale_x = 0.6
@@ -764,7 +784,7 @@ class ARCHIFORGE_PT_tools(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='TOOL_SETTINGS')
+        self.layout.label(text="", **_icon("tools", 'TOOL_SETTINGS'))
 
     def draw(self, context):
         layout = self.layout
@@ -774,12 +794,12 @@ class ARCHIFORGE_PT_tools(Panel):
         # ── Boolean ───────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Boolean", icon='MOD_BOOLEAN')
+        col.label(text="Boolean", **_icon("boolean", 'MOD_BOOLEAN'))
         row = col.row(align=True)
         op = row.operator(
             "archiforge.auto_boolean",
             text="Auto Boolean",
-            icon='MOD_BOOLEAN'
+            **_icon("boolean", 'MOD_BOOLEAN')
         )
         op.mode = 'HYBRID'
         row2 = col.row(align=True)
@@ -793,69 +813,69 @@ class ARCHIFORGE_PT_tools(Panel):
         # ── Wall Tools ────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Wall Tools", icon='SNAP_EDGE')
+        col.label(text="Wall Tools", **_icon("wall", 'SNAP_EDGE'))
         row = col.row(align=True)
         row.operator(
             "archiforge.wall_draw",
             text="Draw Wall",
-            icon='GREASEPENCIL'
+            **_icon("wall_draw", 'GREASEPENCIL')
         )
         row.operator(
             "archiforge.wall_from_curve",
             text="From Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
         col.operator(
             "archiforge.wall_from_slab",
             text="Wall from Slab",
-            icon='MESH_PLANE'
+            **_icon("slab", 'MESH_PLANE')
         )
 
         # ── Slab Tools ────────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Slab Tools", icon='MESH_PLANE')
+        col.label(text="Slab Tools", **_icon("slab", 'MESH_PLANE'))
         row = col.row(align=True)
         row.operator(
             "archiforge.slab_from_wall",
             text="Floor",
-            icon='MESH_PLANE'
+            **_icon("slab", 'MESH_PLANE')
         ).ceiling = False
         row.operator(
             "archiforge.slab_from_wall",
             text="Ceiling",
-            icon='MESH_PLANE'
+            **_icon("ceiling", 'MESH_PLANE')
         ).ceiling = True
         col.operator(
             "archiforge.slab_from_curve",
             text="Slab from Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
 
         # ── Fence Tools ───────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Fence Tools", icon='MESH_PLANE')
+        col.label(text="Fence Tools", **_icon("fence", 'MESH_PLANE'))
         col.operator(
             "archiforge.fence_from_curve",
             text="Fence from Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
 
         # ── Floor Tools ───────────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Floor Tools", icon='MESH_GRID')
+        col.label(text="Floor Tools", **_icon("floor", 'MESH_GRID'))
         row = col.row(align=True)
         row.operator(
             "archiforge.floor_from_curve",
             text="From Curve",
-            icon='CURVE_DATA'
+            **_icon("curve", 'CURVE_DATA')
         )
         row.operator(
             "archiforge.floor_from_wall",
             text="From Wall",
-            icon='SNAP_FACE'
+            **_icon("wall", 'SNAP_FACE')
         )
 
 
@@ -877,7 +897,7 @@ class ARCHIFORGE_PT_quick_edit(Panel):
         return _detect_af_type(context.active_object) is not None
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='PREFERENCES')
+        self.layout.label(text="", **_icon("quick_edit", 'PREFERENCES'))
 
     def draw(self, context):
         obj    = context.active_object
@@ -962,7 +982,7 @@ class ARCHIFORGE_PT_snap_tools(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='SNAP_ON')
+        self.layout.label(text="", **_icon("snap", 'SNAP_ON'))
 
     def draw(self, context):
         layout = self.layout
@@ -1037,7 +1057,7 @@ class ARCHIFORGE_OT_set_grid(Operator):
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
                         space.overlay.grid_scale = self.grid_size
-        self.report({'INFO'}, f"Grid set to {self.grid_size:.3f}m")
+        self.report({'INFO'}, _tr("Grid set to {:.3f}m").format(self.grid_size))
         return {'FINISHED'}
 
 

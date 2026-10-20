@@ -32,12 +32,12 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 5, 1),
+    "version"     : (1, 13, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
-    "doc_url"     : "",
-    "tracker_url" : "",
+    "doc_url"     : "https://github.com/luan920530-commits/ARCHIFORGE#readme",
+    "tracker_url" : "https://github.com/luan920530-commits/ARCHIFORGE/issues",
     "support"     : "COMMUNITY",
     "category"    : "Add Mesh",
 }
@@ -56,6 +56,12 @@ __all__ = [
 # ════════════════════════════════════════════════════════════
 import os
 import sys
+
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
 
 # Nivel de log: 0=silent, 1=errors, 2=warnings, 3=info, 4=debug
 AF_LOG_LEVEL = 3
@@ -77,6 +83,56 @@ def _on_log_level_update(self, context):
         pass
 
 
+def _i18n_module():
+    """Módulo af_i18n si cargó correctamente (import tolerante)."""
+    mod = globals().get("af_i18n")
+    return mod if mod is not None and hasattr(mod, "apply_language") else None
+
+
+def _units_module():
+    mod = globals().get("af_units")
+    return mod if mod is not None and hasattr(mod, "apply_to_scenes") else None
+
+
+def _apply_unit_system(system):
+    """Escribe el sistema de unidades en todas las escenas abiertas."""
+    mod = _units_module()
+    if mod is None:
+        return 0
+    try:
+        return mod.apply_to_scenes(bpy.data.scenes, system)
+    except Exception as e:  # noqa: BLE001 - bpy.data restringido
+        af_log(f"No se pudo aplicar el sistema de unidades: {e}", level=2)
+        return 0
+
+
+def _on_unit_system_update(self, context):
+    """Sincroniza las unidades de la escena con la preferencia del addon."""
+    _apply_unit_system(self.unit_system)
+
+
+def _on_procedural_materials_update(self, context):
+    """Regenera los materiales AF del archivo en el modo elegido."""
+    mod = globals().get("af_material")
+    if mod is None or not hasattr(mod, "refresh_existing_af_materials"):
+        return
+    try:
+        count = mod.refresh_existing_af_materials()
+        af_log(f"Materiales AF regenerados: {count}", level=3)
+    except Exception as e:  # noqa: BLE001
+        af_log(f"No se pudieron regenerar los materiales: {e}", level=2)
+
+
+def _on_language_update(self, context):
+    """Registra el catálogo del idioma elegido y redibuja la interfaz."""
+    mod = _i18n_module()
+    if mod is None:
+        af_log("af_i18n no disponible; el idioma no se puede aplicar",
+               level=2)
+        return
+    mod.apply_language(self.language, __name__)
+
+
 # ════════════════════════════════════════════════════════════
 #  HOT-RELOAD — tolerante a fallos, orden de dependencias
 #  Orden CRÍTICO: core primero, luego objetos, luego UI
@@ -84,8 +140,25 @@ def _on_log_level_update(self, context):
 if "bpy" in locals():
     import importlib as _imp
 
+    # Unregister the old classes and callbacks before importlib.reload replaces
+    # their Python class objects. Otherwise Blender retains the old RNA classes
+    # while the new classes fail to register with the same bl_idname.
+    _previous_unregister = locals().get("unregister")
+    if callable(_previous_unregister):
+        try:
+            _previous_unregister()
+            af_log("Addon anterior desregistrado antes del hot-reload", level=3)
+        except Exception as _err:  # noqa: BLE001 — best-effort cleanup
+            af_log(f"No se pudo limpiar todo antes del hot-reload: {_err}",
+                   level=2)
+
     _RELOAD_ORDER = (
         # 1. Core (base del sistema)
+        "af_i18n_es",
+        "af_i18n",
+        "af_icons",
+        "af_units",
+        "af_material_procedural",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -94,6 +167,13 @@ if "bpy" in locals():
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_room_assets_catalog",
+        "af_room_assets",
+        "af_wall_path",
+        "af_floor_geometry",
+        "af_window_geometry",
+        "af_construction_presets",
+        "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -110,9 +190,13 @@ if "bpy" in locals():
         "af_kitchen",
         "af_decor",
         "af_openings",
-        "af_stairs",
+        # Pure helper, reloaded before the Blender-facing exporter.
+        "af_quantities_io",
         "af_quantities",
         "af_structure",
+        "af_annotation_geometry",
+        "af_annotation",
+        "af_sets",
         "af_control_center",
         # 4. UI (último, depende de todo lo anterior)
         "af_rendering",
@@ -141,7 +225,7 @@ if "bpy" in locals():
 
     af_log("🔄 Hot-reload completado", level=3)
 
-    del _imp, _RELOAD_ORDER, _mod_name, _mod
+    del _imp, _RELOAD_ORDER, _mod_name, _mod, _previous_unregister
 
 else:
     # Imports TOLERANTES (v1.5.1): un módulo ausente o con error
@@ -149,6 +233,11 @@ else:
     import importlib as _imp_first
     _FIRST_ORDER = (
         # 1. Core (base del sistema)
+        "af_i18n_es",
+        "af_i18n",
+        "af_icons",
+        "af_units",
+        "af_material_procedural",
         "af_material",
         "af_snap",
         "af_manipulator",
@@ -157,6 +246,13 @@ else:
         # 2. Lógica compartida
         "af_autoboolean",
         "af_objects_base",
+        "af_room_assets_catalog",
+        "af_room_assets",
+        "af_wall_path",
+        "af_floor_geometry",
+        "af_window_geometry",
+        "af_construction_presets",
+        "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",
         "af_door",
@@ -173,9 +269,13 @@ else:
         "af_kitchen",
         "af_decor",
         "af_openings",
-        "af_stairs",
+        # Pure helper, reloaded before the Blender-facing exporter.
+        "af_quantities_io",
         "af_quantities",
         "af_structure",
+        "af_annotation_geometry",
+        "af_annotation",
+        "af_sets",
         "af_control_center",
         # 4. UI (último, depende de todo lo anterior)
         "af_rendering",
@@ -202,7 +302,7 @@ else:
 import bpy
 from bpy.utils import previews
 from bpy.types import (
-    Panel, Menu,
+    Panel, Menu, Operator,
     AddonPreferences,
 )
 from bpy.props import (
@@ -240,7 +340,8 @@ def _load_icons():
     icons_dir = os.path.join(os.path.dirname(__file__), "icons")
 
     if not os.path.isdir(icons_dir):
-        af_log(f"Carpeta de íconos no encontrada: {icons_dir}", level=2)
+        af_log("No hay íconos personalizados; se usarán los iconos de Blender",
+               level=3)
         _icons_collection["main"] = previews.new()
         return
 
@@ -292,6 +393,14 @@ def _icon_kw(icons, name, fallback='MESH_CUBE'):
     return {'icon': fallback}
 
 
+def _item_icon(item_type, default):
+    """Nombre del ícono propio de un ``item_type`` (ver af_icons.ITEM_ICONS)."""
+    table = getattr(globals().get("af_icons"), "ITEM_ICONS", None)
+    if table:
+        return table.get(item_type, default)
+    return default
+
+
 def _op_exists(idname):
     """True si el operador está registrado (evita romper el draw)."""
     try:
@@ -320,6 +429,22 @@ def _available_ids(modname, attr, fallback):
 class ArchiForge_Pref(AddonPreferences):
     bl_idname = __name__
 
+    language : EnumProperty(
+        name="Addon language",
+        description=("Language used by ArchiForge only; Blender keeps its "
+                     "own language"),
+        items=[('EN', "English", "Show ArchiForge in English"),
+               ('ES', "Español", "Mostrar ArchiForge en español")],
+        default='EN',
+        update=_on_language_update,
+    )
+    # Casillas de traducción de Blender que el addon activó (para
+    # restaurarlas al desactivarlo).
+    i18n_forced_use_translate_interface : BoolProperty(
+        default=False, options={'HIDDEN'})
+    i18n_forced_use_translate_tooltips : BoolProperty(
+        default=False, options={'HIDDEN'})
+
     # ── Pestaña activa en preferencias ──────────────────────
     pref_tab : EnumProperty(
         name  = "Tab",
@@ -345,6 +470,16 @@ class ArchiForge_Pref(AddonPreferences):
         description = "Automatically cut openings in walls for doors/windows",
         default     = True,
     )
+    procedural_materials : BoolProperty(
+        name        = "Procedural Materials",
+        description = ("Build node-based textures (brick and block bond, "
+                       "ceramic, wood grain, concrete, marble, clay, "
+                       "plaster, fabric) for the ArchiForge materials "
+                       "instead of flat colors; visible in Material "
+                       "Preview and Rendered shading"),
+        default     = True,
+        update      = _on_procedural_materials_update,
+    )
     auto_material : BoolProperty(
         name        = "Auto Material",
         description = "Assign base materials automatically on object creation",
@@ -352,11 +487,14 @@ class ArchiForge_Pref(AddonPreferences):
     )
     unit_system : EnumProperty(
         name  = "Unit System",
+        description = ("Units shown by ArchiForge and used in the quantities "
+                       "CSV; applied to the unit settings of the open scenes"),
         items = [
             ('METRIC',   "Metric (m/cm)",  "Use meters and centimeters"),
             ('IMPERIAL', "Imperial (ft/in)", "Use feet and inches"),
         ],
         default = 'METRIC',
+        update = _on_unit_system_update,
     )
     matlib_path : StringProperty(
         name        = "Material Library Folder",
@@ -509,7 +647,10 @@ class ArchiForge_Pref(AddonPreferences):
         # ── Header con logo ─────────────────────────────────
         box = layout.box()
         row = box.row(align=True)
-        row.label(text=f"ArchiForge v{ver}", icon='HOME')
+        row.label(
+            text=f"ArchiForge v{ver}",
+            **_icon_kw(get_icons(), "archiforge", 'HOME'),
+        )
         row.label(text="for Blender 3.3 LTS")
 
         # ── Tabs de navegación ───────────────────────────────
@@ -529,34 +670,80 @@ class ArchiForge_Pref(AddonPreferences):
 
     def _draw_general(self, layout):
         col = layout.column(align=True)
+        icons = get_icons()
 
         box = col.box()
-        box.label(text="Interface", icon='WINDOW')
+        box.label(text="Interface", **_icon_kw(icons, "preferences", 'WINDOW'))
+        box.prop(self, "language", **_icon_kw(icons, "language", 'WORLD'))
+        self._draw_language_hints(box)
         box.prop(self, "create_submenu")
-        box.prop(self, "unit_system")
+        box.prop(self, "unit_system",
+                 **_icon_kw(icons, "units", 'DRIVER_DISTANCE'))
+        self._draw_unit_hints(box)
 
         col.separator()
         box = col.box()
-        box.label(text="Behavior", icon='MODIFIER')
+        box.label(text="Behavior", **_icon_kw(icons, "snap", 'MODIFIER'))
         box.prop(self, "auto_boolean")
         box.prop(self, "auto_material")
+        box.prop(self, "procedural_materials")
 
         col.separator()
         box = col.box()
-        box.label(text="Material Library", icon='MATERIAL')
+        box.label(text="Material Library",
+                  **_icon_kw(icons, "material_library", 'MATERIAL'))
         box.prop(self, "matlib_path", text="")
+
+    def _draw_language_hints(self, box):
+        """Avisa si Blender tiene apagadas las casillas que permiten
+        traducir la interfaz del addon y las ofrece para activarlas."""
+        mod = _i18n_module()
+        if mod is None:
+            box.label(text="Language module unavailable", icon='ERROR')
+            return
+        if mod.blender_flags_enabled():
+            return
+        col = box.column(align=True)
+        col.label(text="Blender translation is off; enable it to apply the "
+                       "addon language", icon='INFO')
+        try:
+            view = bpy.context.preferences.view
+        except Exception:  # noqa: BLE001
+            return
+        row = col.row(align=True)
+        row.prop(view, "use_translate_interface", text="Translate Interface")
+        row.prop(view, "use_translate_tooltips", text="Translate Tooltips")
+
+    def _draw_unit_hints(self, box):
+        """Avisa cuando la escena activa no usa el sistema elegido (p. ej.
+        tras abrir otro archivo) y ofrece aplicarlo."""
+        mod = _units_module()
+        if mod is None:
+            return
+        try:
+            scene = bpy.context.scene
+        except Exception:  # noqa: BLE001
+            return
+        if scene is None or mod.scene_system(scene) == self.unit_system:
+            return
+        row = box.row(align=True)
+        row.label(text="The active scene uses another unit system",
+                  icon='INFO')
+        row.operator("archiforge.apply_unit_system", text="Apply to Scenes",
+                     **_icon_kw(get_icons(), "units", 'SCENE_DATA'))
 
     def _draw_manipulators(self, layout):
         col = layout.column(align=True)
+        icons = get_icons()
 
         box = col.box()
-        box.label(text="Style", icon='GREASEPENCIL')
+        box.label(text="Style", **_icon_kw(icons, "manipulator", 'GREASEPENCIL'))
         box.prop(self, "max_style_draw_tool")
         box.prop(self, "show_gizmos")
 
         col.separator()
         box = col.box()
-        box.label(text="Sizes", icon='FULLSCREEN_ENTER')
+        box.label(text="Sizes", **_icon_kw(icons, "quick_edit", 'FULLSCREEN_ENTER'))
         split = box.split(factor=0.5)
         c = split.column(align=True)
         c.prop(self, "arrow_size")
@@ -623,6 +810,28 @@ class ArchiForge_Pref(AddonPreferences):
 # ════════════════════════════════════════════════════════════
 #  PANEL PRINCIPAL — "ArchiForge" en Sidebar
 # ════════════════════════════════════════════════════════════
+class ARCHIFORGE_OT_apply_unit_system(Operator):
+    """Escribe la preferencia Unit System en las escenas del archivo."""
+    bl_idname = "archiforge.apply_unit_system"
+    bl_label = "Apply Unit System to Scenes"
+    bl_description = ("Set the unit settings of every open scene to the "
+                      "ArchiForge unit system (metric or imperial)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        try:
+            system = context.preferences.addons[__name__].preferences.unit_system
+        except Exception:  # noqa: BLE001
+            system = 'METRIC'
+        count = _apply_unit_system(system)
+        if count:
+            self.report({'INFO'}, _tr("Unit system applied to {} scene(s)")
+                                  .format(count))
+            return {'FINISHED'}
+        self.report({'WARNING'}, _tr("Unit system could not be applied"))
+        return {'CANCELLED'}
+
+
 class ARCHIFORGE_PT_create(Panel):
     bl_label       = "ArchiForge"
     bl_idname      = "ARCHIFORGE_PT_create"
@@ -638,15 +847,15 @@ class ARCHIFORGE_PT_create(Panel):
 
     def draw_header(self, context):
         icons = get_icons()
-        if "archipack" in icons:
-            self.layout.label(
-                text="",
-                icon_value=icons["archipack"].icon_id
-            )
-        elif "archiforge" in icons:
+        if "archiforge" in icons:
             self.layout.label(
                 text="",
                 icon_value=icons["archiforge"].icon_id
+            )
+        elif "archipack" in icons:
+            self.layout.label(
+                text="",
+                icon_value=icons["archipack"].icon_id
             )
         else:
             self.layout.label(text="", icon='HOME')
@@ -681,81 +890,79 @@ class ARCHIFORGE_PT_create(Panel):
             "af_openings", "AF_OPEN_TYPES",
             {'DOOR_SINGLE', 'WIN_SLIDING'})
         stair_avail = _available_ids(
-            "af_stairs", "AF_STAIR_TYPES",
+            "af_stair", "AF_STAIR_TYPES",
             {'STRAIGHT', 'RAMP'})
         has_open = _op_exists("archiforge.opening")
-        has_stair = _op_exists("archiforge.stairs")
+        has_stair = _op_exists("archiforge.stair")
         has_quant = _op_exists("archiforge.quantities_export")
         struct_avail = _available_ids(
             "af_structure", "AF_STRUCT_TYPES",
             {'COLUMN', 'GRID'})
         has_struct = _op_exists("archiforge.structure")
 
+        # Cada ítem usa su ícono propio (af_icons.ITEM_ICONS); si falta el
+        # PNG cae al ícono del módulo y, en último término, al de Blender.
+        def _item_btn(row, op, text, tid, group_icon, fallback):
+            row.operator(
+                op, text=text,
+                **_icon_kw(icons, _item_icon(tid, group_icon), fallback)
+            ).item_type = tid
+
         def bath_btn(row, text, tid, icon='SPHERE'):
             if has_bath and tid in bath_avail:
-                row.operator(
-                    "archiforge.bathroom", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.bathroom", text, tid,
+                          "bathroom", icon)
 
         def elec_btn(row, text, tid, icon='PLUGIN'):
             if has_elec and tid in elec_avail:
-                row.operator(
-                    "archiforge.electrical", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.electrical", text, tid,
+                          "electrical", icon)
 
         def furn_btn(row, text, tid, icon='MESH_CUBE'):
             if has_furn and tid in furn_avail:
-                row.operator(
-                    "archiforge.furniture", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.furniture", text, tid,
+                          "furniture", icon)
 
         def kit_btn(row, text, tid, icon='MESH_CUBE'):
             if has_kit and tid in kit_avail:
-                row.operator(
-                    "archiforge.kitchen", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.kitchen", text, tid,
+                          "kitchen", icon)
 
         def dec_btn(row, text, tid, icon='MESH_CUBE'):
             if has_decor and tid in decor_avail:
-                row.operator(
-                    "archiforge.decor", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.decor", text, tid, "decor", icon)
 
         def open_btn(row, text, tid, icon='MESH_CUBE'):
             if has_open and tid in open_avail:
-                row.operator(
-                    "archiforge.opening", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.opening", text, tid,
+                          "opening", icon)
 
         def stair_btn(row, text, tid, icon='MESH_CUBE'):
             if has_stair and tid in stair_avail:
-                row.operator(
-                    "archiforge.stairs", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.stair", text, tid, "stair", icon)
 
         def struct_btn(row, text, tid, icon='MESH_CUBE'):
             if has_struct and tid in struct_avail:
-                row.operator(
-                    "archiforge.structure", text=text, icon=icon
-                ).item_type = tid
+                _item_btn(row, "archiforge.structure", text, tid,
+                          "structure", icon)
 
         # ── SECCIÓN: Herramientas globales ───────────────────
         box = layout.box()
         row = box.row(align=True)
-        row.label(text="Tools", icon='TOOL_SETTINGS')
+        row.label(text="Tools", **_icon_kw(icons, "tools", 'TOOL_SETTINGS'))
         row = box.row(align=True)
         if _op_exists("archiforge.auto_boolean"):
             row.operator(
                 "archiforge.auto_boolean",
                 text="Auto Boolean",
-                icon='MOD_BOOLEAN'
+                **_icon_kw(icons, "boolean", 'MOD_BOOLEAN')
             ).mode = 'HYBRID'
         row = box.row(align=True)
         if _op_exists("archiforge.control_center"):
             row.operator(
                 "archiforge.control_center",
                 text="Control Center",
-                icon='HOME'
+                **_icon_kw(icons, "control_center", 'HOME')
             )
 
         layout.separator(factor=0.3)
@@ -763,7 +970,7 @@ class ARCHIFORGE_PT_create(Panel):
         # ── SECCIÓN: Estructura ──────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Structure", icon='MESH_CUBE')
+        col.label(text="Structure", **_icon_kw(icons, "structure", 'MESH_CUBE'))
 
         # — Muros —
         row = col.row(align=True)
@@ -772,10 +979,10 @@ class ARCHIFORGE_PT_create(Panel):
             **_icon_kw(icons, "wall", 'SNAP_FACE'))
         if _op_exists("archiforge.wall_draw"):
             row.operator("archiforge.wall_draw", text="Draw",
-                         icon='GREASEPENCIL')
+                         **_icon_kw(icons, "wall_draw", 'GREASEPENCIL'))
         if _op_exists("archiforge.wall_from_curve"):
             row.operator("archiforge.wall_from_curve", text="",
-                         icon='CURVE_DATA')
+                         **_icon_kw(icons, "curve", 'CURVE_DATA'))
 
         # — Losa / Techo —
         row = col.row(align=True)
@@ -783,13 +990,17 @@ class ARCHIFORGE_PT_create(Panel):
             row.operator(
                 "archiforge.slab_from_curve", text="Slab",
                 **_icon_kw(icons, "slab", 'MESH_CUBE'))
+        if _op_exists("archiforge.slab_draw"):
+            row.operator(
+                "archiforge.slab_draw", text="Draw",
+                **_icon_kw(icons, "draw", 'GREASEPENCIL'))
         if _op_exists("archiforge.slab_from_wall"):
             row.operator(
                 "archiforge.slab_from_wall", text="Floor",
                 **_icon_kw(icons, "slab", 'MESH_CUBE')).ceiling = False
             row.operator(
                 "archiforge.slab_from_wall", text="Ceiling",
-                **_icon_kw(icons, "slab", 'MESH_CUBE')).ceiling = True
+                **_icon_kw(icons, "ceiling", 'MESH_CUBE')).ceiling = True
 
         # — Techo —
         row = col.row(align=True)
@@ -804,7 +1015,7 @@ class ARCHIFORGE_PT_create(Panel):
         # ── SECCIÓN: Aberturas ───────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Openings", icon='MESH_PLANE')
+        col.label(text="Openings", **_icon_kw(icons, "opening", 'MESH_PLANE'))
 
         # — Puertas —
         row = col.row(align=True)
@@ -815,7 +1026,7 @@ class ARCHIFORGE_PT_create(Panel):
             ).preset_operator = "archiforge.door"
             row.operator(
                 "archiforge.door_preset_menu", text="Draw",
-                icon='GREASEPENCIL'
+                **_icon_kw(icons, "draw", 'GREASEPENCIL')
             ).preset_operator = "archiforge.door_draw"
 
         # — Ventanas —
@@ -827,7 +1038,7 @@ class ARCHIFORGE_PT_create(Panel):
             ).preset_operator = "archiforge.window"
             row.operator(
                 "archiforge.window_preset_menu", text="Draw",
-                icon='GREASEPENCIL'
+                **_icon_kw(icons, "draw", 'GREASEPENCIL')
             ).preset_operator = "archiforge.window_draw"
 
         layout.separator(factor=0.3)
@@ -835,7 +1046,7 @@ class ARCHIFORGE_PT_create(Panel):
         # ── SECCIÓN: Circulación ─────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Circulation", icon='EXPORT')
+        col.label(text="Circulation", **_icon_kw(icons, "stair", 'EXPORT'))
 
         row = col.row(align=True)
         if _op_exists("archiforge.stair_preset_menu"):
@@ -850,7 +1061,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_bath:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Bathroom", icon='SPHERE')
+            col.label(text="Bathroom", **_icon_kw(icons, "bathroom", 'SPHERE'))
 
             row = col.row(align=True)
             bath_btn(row, "Toilet",  'TOILET')
@@ -878,7 +1089,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_elec:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Electrical", icon='PLUGIN')
+            col.label(text="Electrical", **_icon_kw(icons, "electrical", 'PLUGIN'))
 
             row = col.row(align=True)
             elec_btn(row, "Outlet", 'OUTLET')
@@ -906,7 +1117,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_furn:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Furniture", icon='MESH_CUBE')
+            col.label(text="Furniture", **_icon_kw(icons, "furniture", 'MESH_CUBE'))
 
             row = col.row(align=True)
             furn_btn(row, "D.Chair", 'DINING_CHAIR')
@@ -934,7 +1145,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_kit:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Kitchen", icon='MESH_CUBE')
+            col.label(text="Kitchen", **_icon_kw(icons, "kitchen", 'MESH_CUBE'))
 
             row = col.row(align=True)
             kit_btn(row, "Fridge", 'FRIDGE')
@@ -959,7 +1170,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_decor:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Decor", icon='LIGHT')
+            col.label(text="Decor", **_icon_kw(icons, "decor", 'LIGHT'))
 
             row = col.row(align=True)
             dec_btn(row, "Planter", 'PLANTER')
@@ -984,11 +1195,19 @@ class ARCHIFORGE_PT_create(Panel):
 
             layout.separator(factor=0.3)
 
+        if _op_exists("archiforge.room_asset"):
+            box = layout.box()
+            box.label(text="Room Assets · 100 objects / sets",
+                      **_icon_kw(icons, "room_assets", 'ASSET_MANAGER'))
+            box.operator("archiforge.room_asset", text="Browse by room",
+                         **_icon_kw(icons, "room_assets", 'MESH_CUBE'))
+            layout.separator(factor=0.3)
+
         # ── SECCIÓN: Aberturas (NUEVO — v1.3) ──────────────
         if has_open:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Doors & Windows", icon='MESH_CUBE')
+            col.label(text="Doors & Windows", **_icon_kw(icons, "opening", 'MESH_CUBE'))
 
             row = col.row(align=True)
             open_btn(row, "Door 1H", 'DOOR_SINGLE')
@@ -1008,7 +1227,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_stair:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Stairs & Ramp", icon='MESH_CUBE')
+            col.label(text="Stairs & Ramp", **_icon_kw(icons, "stair", 'MESH_CUBE'))
 
             row = col.row(align=True)
             stair_btn(row, "Straight", 'STRAIGHT')
@@ -1024,9 +1243,44 @@ class ARCHIFORGE_PT_create(Panel):
         if has_quant:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Quantities", icon='SPREADSHEET')
-            col.operator("archiforge.quantities_export",
-                         text="Export CSV (Excel)", icon='EXPORT')
+            col.label(text="Quantities", **_icon_kw(icons, "quantities", 'SPREADSHEET'))
+            col.operator(
+                "archiforge.quantities_export",
+                text="Export CSV (Excel)",
+                **_icon_kw(icons, "quantities", 'EXPORT'),
+            )
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Anotaciones (v1.12) ─────────────────────
+        if _op_exists("archiforge.dimension_selected"):
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Annotations",
+                      **_icon_kw(icons, "annotation", 'DRIVER_DISTANCE'))
+            row = col.row(align=True)
+            row.operator("archiforge.dimension_selected", text="Dimension",
+                         **_icon_kw(icons, "dimension", 'ARROW_LEFTRIGHT'))
+            row.operator("archiforge.dimension_draw", text="Draw",
+                         **_icon_kw(icons, "dimension_draw", 'GREASEPENCIL'))
+            row = col.row(align=True)
+            row.operator("archiforge.grid_axes", text="Axes",
+                         **_icon_kw(icons, "grid_axes", 'GRID'))
+            row.operator("archiforge.north_arrow", text="North",
+                         **_icon_kw(icons, "north_arrow", 'ORIENTATION_VIEW'))
+
+            layout.separator(factor=0.3)
+
+        # ── SECCIÓN: Conjuntos (v1.12) ───────────────────────
+        if _op_exists("archiforge.set_bathroom"):
+            box = layout.box()
+            col = box.column(align=True)
+            col.label(text="Sets", **_icon_kw(icons, "sets", 'HOME'))
+            col.operator("archiforge.set_bathroom",
+                         text="Complete Bathroom (CO)",
+                         **_icon_kw(icons, "set_bathroom", 'SPHERE'))
+            col.operator("archiforge.set_apartment", text="Demo Apartment",
+                         **_icon_kw(icons, "set_apartment", 'HOME'))
 
             layout.separator(factor=0.3)
 
@@ -1034,7 +1288,7 @@ class ARCHIFORGE_PT_create(Panel):
         if has_struct:
             box = layout.box()
             col = box.column(align=True)
-            col.label(text="Structure+", icon='MESH_CUBE')
+            col.label(text="Structure+", **_icon_kw(icons, "structure", 'MESH_CUBE'))
 
             row = col.row(align=True)
             struct_btn(row, "Footing", 'FOOTING')
@@ -1053,7 +1307,7 @@ class ARCHIFORGE_PT_create(Panel):
         # ── SECCIÓN: Extras ──────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Extras", icon='PLUS')
+        col.label(text="Extras", **_icon_kw(icons, "truss", 'PLUS'))
 
         row = col.row(align=True)
         if _op_exists("archiforge.fence_preset_menu"):
@@ -1063,7 +1317,7 @@ class ARCHIFORGE_PT_create(Panel):
             ).preset_operator = "archiforge.fence"
         if _op_exists("archiforge.fence_from_curve"):
             row.operator("archiforge.fence_from_curve", text="",
-                         icon='CURVE_DATA')
+                         **_icon_kw(icons, "curve", 'CURVE_DATA'))
 
         row = col.row(align=True)
         if _op_exists("archiforge.floor_preset_menu"):
@@ -1073,8 +1327,12 @@ class ARCHIFORGE_PT_create(Panel):
             ).preset_operator = "archiforge.floor"
             row.operator(
                 "archiforge.floor_preset_menu", text="",
-                icon='CURVE_DATA'
+                **_icon_kw(icons, "curve", 'CURVE_DATA')
             ).preset_operator = "archiforge.floor_from_curve"
+        if _op_exists("archiforge.floor_draw"):
+            row.operator(
+                "archiforge.floor_draw", text="Draw",
+                **_icon_kw(icons, "draw", 'GREASEPENCIL'))
 
         row = col.row(align=True)
         if _op_exists("archiforge.truss"):
@@ -1087,7 +1345,7 @@ class ARCHIFORGE_PT_create(Panel):
         # ── SECCIÓN: Wall → otros ────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="From Wall", icon='LINKED')
+        col.label(text="From Wall", **_icon_kw(icons, "wall", 'LINKED'))
         row = col.row(align=True)
         if _op_exists("archiforge.wall_from_slab"):
             row.operator(
@@ -1113,13 +1371,26 @@ def _draw_shift_a_menu(self, context):
     if _op_exists("archiforge.control_center"):
         layout.operator(
             "archiforge.control_center",
-            text="Control Center", icon='HOME')
+            text="Control Center",
+            **_icon_kw(icons, "control_center", 'HOME'))
         layout.separator()
 
     if _op_exists("archiforge.wall"):
         layout.operator(
             "archiforge.wall", text="Wall",
             **_icon_kw(icons, "wall", 'MESH_CUBE'))
+    if _op_exists("archiforge.wall_draw"):
+        layout.operator(
+            "archiforge.wall_draw", text="Draw Wall / Room",
+            **_icon_kw(icons, "wall_draw", 'GREASEPENCIL'))
+    if _op_exists("archiforge.slab_draw"):
+        layout.operator(
+            "archiforge.slab_draw", text="Draw Slab",
+            **_icon_kw(icons, "slab", 'MESH_CUBE'))
+    if _op_exists("archiforge.floor_draw"):
+        layout.operator(
+            "archiforge.floor_draw", text="Draw Floor",
+            **_icon_kw(icons, "floor", 'MESH_GRID'))
     if _op_exists("archiforge.window_preset_menu"):
         layout.operator(
             "archiforge.window_preset_menu", text="Window",
@@ -1160,28 +1431,49 @@ def _draw_shift_a_menu(self, context):
         layout.separator()
     if _op_exists("archiforge.bathroom"):
         layout.operator("archiforge.bathroom", text="Bathroom Fixture",
-                        icon='SPHERE')
+                        **_icon_kw(icons, "bathroom", 'SPHERE'))
     if _op_exists("archiforge.electrical"):
         layout.operator("archiforge.electrical", text="Electrical Item",
-                        icon='PLUGIN')
+                        **_icon_kw(icons, "electrical", 'PLUGIN'))
     if _op_exists("archiforge.furniture"):
         layout.operator("archiforge.furniture", text="Furniture",
-                        icon='MESH_CUBE')
+                        **_icon_kw(icons, "furniture", 'MESH_CUBE'))
     if _op_exists("archiforge.kitchen"):
         layout.operator("archiforge.kitchen", text="Kitchen Item",
-                        icon='MESH_CUBE')
+                        **_icon_kw(icons, "kitchen", 'MESH_CUBE'))
     if _op_exists("archiforge.decor"):
         layout.operator("archiforge.decor", text="Decor Item",
-                        icon='LIGHT')
+                        **_icon_kw(icons, "decor", 'LIGHT'))
+    if _op_exists("archiforge.room_asset"):
+        layout.operator("archiforge.room_asset", text="Room Asset Library",
+                        **_icon_kw(icons, "room_assets", 'ASSET_MANAGER'))
     if _op_exists("archiforge.opening"):
         layout.operator("archiforge.opening", text="Door/Window",
-                        icon='MESH_CUBE')
-    if _op_exists("archiforge.stairs"):
-        layout.operator("archiforge.stairs", text="Stair/Ramp",
-                        icon='MESH_CUBE')
+                        **_icon_kw(icons, "opening", 'MESH_CUBE'))
+    if _op_exists("archiforge.stair"):
+        layout.operator("archiforge.stair", text="Stair/Ramp",
+                        **_icon_kw(icons, "stair", 'MESH_CUBE'))
     if _op_exists("archiforge.structure"):
         layout.operator("archiforge.structure", text="Structure",
-                        icon='MESH_CUBE')
+                        **_icon_kw(icons, "structure", 'MESH_CUBE'))
+
+    # ── Anotaciones y conjuntos (v1.12) ──────────────────────
+    if _op_exists("archiforge.dimension_selected"):
+        layout.separator()
+        layout.operator("archiforge.dimension_selected",
+                        text="Dimension Selected",
+                        **_icon_kw(icons, "dimension", 'ARROW_LEFTRIGHT'))
+        layout.operator("archiforge.grid_axes", text="Grid Axes",
+                        **_icon_kw(icons, "grid_axes", 'GRID'))
+        layout.operator("archiforge.north_arrow", text="North Arrow",
+                        **_icon_kw(icons, "north_arrow", 'ORIENTATION_VIEW'))
+    if _op_exists("archiforge.set_bathroom"):
+        layout.separator()
+        layout.operator("archiforge.set_bathroom",
+                        text="Complete Bathroom (CO)",
+                        **_icon_kw(icons, "set_bathroom", 'SPHERE'))
+        layout.operator("archiforge.set_apartment", text="Demo Apartment",
+                        **_icon_kw(icons, "set_apartment", 'HOME'))
 
 
 class ARCHIFORGE_MT_create(Menu):
@@ -1213,15 +1505,15 @@ def menu_func(self, context):
 
     if use_submenu:
         layout.operator_context = 'INVOKE_REGION_WIN'
-        if "archipack" in icons:
-            layout.menu(
-                "ARCHIFORGE_MT_create",
-                icon_value=icons["archipack"].icon_id
-            )
-        elif "archiforge" in icons:
+        if "archiforge" in icons:
             layout.menu(
                 "ARCHIFORGE_MT_create",
                 icon_value=icons["archiforge"].icon_id
+            )
+        elif "archipack" in icons:
+            layout.menu(
+                "ARCHIFORGE_MT_create",
+                icon_value=icons["archipack"].icon_id
             )
         else:
             layout.menu("ARCHIFORGE_MT_create", icon='HOME')
@@ -1241,6 +1533,7 @@ _modules = [
     af_preset,
     af_autoboolean,
     af_objects_base,
+    af_room_assets,
     af_wall,
     af_door,
     af_window,
@@ -1256,9 +1549,10 @@ _modules = [
     af_kitchen,
     af_decor,
     af_openings,
-    af_stairs,
     af_quantities,
     af_structure,
+    af_annotation,
+    af_sets,
     af_control_center,
     af_rendering,
     af_panel,
@@ -1271,6 +1565,7 @@ _modules = [m for m in _modules if m is not None]
 # Clases propias de __init__.py
 _own_classes = [
     ArchiForge_Pref,
+    ARCHIFORGE_OT_apply_unit_system,
     ARCHIFORGE_PT_create,
     ARCHIFORGE_MT_create,
 ]
@@ -1328,6 +1623,14 @@ def register():
     except Exception:
         pass
 
+    # ── Idioma del addon (independiente del de Blender) ─────
+    i18n = _i18n_module()
+    if i18n is not None:
+        try:
+            i18n.apply_language(i18n.current_language(__name__), __name__)
+        except Exception as e:  # noqa: BLE001
+            af_log(f"No se pudo aplicar el idioma del addon: {e}", level=2)
+
     # ── Reporte final ────────────────────────────────────────
     print("─" * 55)
     print(f"  ✅  ArchiForge v{ver} — {ok_count} módulos OK", end="")
@@ -1341,6 +1644,14 @@ def register():
 
 
 def unregister():
+    # ── Liberar el catálogo de idioma ────────────────────────
+    i18n = _i18n_module()
+    if i18n is not None:
+        try:
+            i18n.release(__name__)
+        except Exception as e:  # noqa: BLE001
+            af_log(f"Error liberando traducciones: {e}", level=2)
+
     # ── Quitar del menú Shift+A ──────────────────────────────
     try:
         bpy.types.VIEW3D_MT_mesh_add.remove(menu_func)

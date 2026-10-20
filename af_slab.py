@@ -50,12 +50,27 @@ from bpy.props import (
 )
 
 from . import af_material
+from .af_floor_geometry import normalize_outline
+from .af_outline_draw import AF_OutlineDrawMixin
+
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
 
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
 # ════════════════════════════════════════════════════════════
 AF_SLAB_PROP = "archiforge_slab"
+_SLAB_UPDATE_SUSPENDED = False
 
 AF_SLAB_TYPES = [
     ('RECTANGLE', "Rectangle", "Simple rectangular slab",           'MESH_PLANE', 0),
@@ -781,6 +796,8 @@ def _find_slab_object(props):
 
 
 def af_slab_system_update(self, context):
+    if _SLAB_UPDATE_SUSPENDED:
+        return
     presets = {
         'MACIZA': {'thickness': 0.20},
         'ALIGERADA': {'thickness': 0.30, 'joist_width': 0.10,
@@ -801,6 +818,8 @@ def af_slab_system_update(self, context):
 
 
 def af_slab_update(self, context):
+    if _SLAB_UPDATE_SUSPENDED:
+        return
     # self puede ser AF_SlabProperties, AF_SlabVertex o AF_SlabHole
     props = self
     if not hasattr(self, "is_af_slab"):
@@ -821,6 +840,8 @@ def af_slab_update(self, context):
 
 
 def af_slab_verts_update(self, context):
+    if _SLAB_UPDATE_SUSPENDED:
+        return
     obj = _find_slab_object(self) or context.active_object
     if obj is None:
         return
@@ -848,6 +869,8 @@ def af_slab_verts_update(self, context):
 
 
 def af_slab_holes_update(self, context):
+    if _SLAB_UPDATE_SUSPENDED:
+        return
     obj = _find_slab_object(self) or context.active_object
     if obj is None:
         return
@@ -893,29 +916,72 @@ def _setup_slab_materials(obj):
 
 
 def _create_slab_object(context, name="AF_Slab"):
-    me  = bpy.data.meshes.new(name)
-    obj = bpy.data.objects.new(name, me)
-    context.collection.objects.link(obj)
-    context.view_layer.objects.active = obj
-    obj.select_set(True)
+    mesh = bpy.data.meshes.new(name)
+    obj = None
+    try:
+        obj = bpy.data.objects.new(name, mesh)
+        context.collection.objects.link(obj)
+        context.view_layer.objects.active = obj
+        obj.select_set(True)
 
-    props = obj.archiforge_slab
-    props.is_af_slab  = True
-    props.object_name = obj.name
-    _setup_slab_materials(obj)
-    return obj, props
+        props = obj.archiforge_slab
+        props.is_af_slab = True
+        props.object_name = obj.name
+        _setup_slab_materials(obj)
+        return obj, props
+    except Exception:
+        if obj is not None and obj.name in bpy.data.objects:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh.users == 0 and mesh.name in bpy.data.meshes:
+            bpy.data.meshes.remove(mesh)
+        raise
 
 
 def _fill_vertices_from_points(props, points):
-    props.n_vertices = max(len(points), 3)
-    # sync collection size
-    while len(props.vertices) < len(points):
-        props.vertices.add()
-    while len(props.vertices) > len(points):
-        props.vertices.remove(len(props.vertices) - 1)
-    for i, pt in enumerate(points):
-        props.vertices[i].x = pt[0]
-        props.vertices[i].y = pt[1]
+    global _SLAB_UPDATE_SUSPENDED
+    previous_suspend = _SLAB_UPDATE_SUSPENDED
+    _SLAB_UPDATE_SUSPENDED = True
+    try:
+        props.n_vertices = max(len(points), 3)
+        while len(props.vertices) < len(points):
+            props.vertices.add()
+        while len(props.vertices) > len(points):
+            props.vertices.remove(len(props.vertices) - 1)
+        for index, point in enumerate(points):
+            props.vertices[index].x = point[0]
+            props.vertices[index].y = point[1]
+    finally:
+        _SLAB_UPDATE_SUSPENDED = previous_suspend
+
+
+def _set_slab_outline(props, points):
+    """Store a validated world-space path in slab-local XY coordinates."""
+    global _SLAB_UPDATE_SUSPENDED
+    coords = normalize_outline(
+        points, min_segment_length=0.01, max_vertices=64)
+    xs = [point[0] for point in coords]
+    ys = [point[1] for point in coords]
+    x0, x1 = min(xs), max(xs)
+    y0, y1 = min(ys), max(ys)
+    width, depth = x1 - x0, y1 - y0
+    if width < 0.10 or depth < 0.10:
+        raise ValueError("El contorno debe medir al menos 0.10 m en X e Y")
+
+    previous_suspend = _SLAB_UPDATE_SUSPENDED
+    _SLAB_UPDATE_SUSPENDED = True
+    try:
+        props.slab_type = 'CUSTOM'
+        props.origin_mode = 'CORNER'
+        props.width = width
+        props.depth = depth
+        props.overhang = 0.0
+        props.n_vertices = len(coords)
+        _fill_vertices_from_points(
+            props, [(x - x0, y - y0) for x, y in coords])
+    finally:
+        _SLAB_UPDATE_SUSPENDED = previous_suspend
+
+    return (x0, y0), width, depth
 
 
 def _points_from_curve(curve_obj):
@@ -993,8 +1059,54 @@ class ARCHIFORGE_OT_slab(Operator):
         props.z_offset  = self.z_offset
         props.is_ceiling = (self.slab_use == 'CEILING')
         _rebuild_slab_mesh(obj, props)
-        self.report({'INFO'}, f"Slab created: {obj.name}")
+        self.report({'INFO'}, _tr("Slab created: {}").format(obj.name))
         return {'FINISHED'}
+
+
+class ARCHIFORGE_OT_slab_draw(AF_OutlineDrawMixin, Operator):
+    """Draw a closed custom outline for a parametric slab."""
+    bl_idname = "archiforge.slab_draw"
+    bl_label = "Draw Slab Outline"
+    bl_description = (
+        "Click slab perimeter vertices, then click the first point or "
+        "press C/Enter to close"
+    )
+    bl_options = {'REGISTER', 'UNDO'}
+    outline_tool_label = "Slab"
+
+    slab_use : EnumProperty(
+        name="Use", items=AF_SLAB_USE, default='FLOOR',
+    )
+    thickness : FloatProperty(
+        name="Thickness", default=0.20, min=0.02, unit='LENGTH',
+    )
+
+    def _create_from_outline(self, context, points):
+        global _SLAB_UPDATE_SUSPENDED
+        obj = None
+        previous_suspend = _SLAB_UPDATE_SUSPENDED
+        _SLAB_UPDATE_SUSPENDED = True
+        try:
+            obj, props = _create_slab_object(context, "AF_Slab")
+            origin, _, _ = _set_slab_outline(props, points)
+            obj.location = (origin[0], origin[1], self._draw_z)
+            props.slab_use = self.slab_use
+            props.thickness = self.thickness
+            props.z_offset = 0.0
+            props.is_ceiling = self.slab_use == 'CEILING'
+            props.source_curve = ""
+            props.source_wall = ""
+            _rebuild_slab_mesh(obj, props)
+            return obj
+        except Exception:
+            if obj is not None and obj.name in bpy.data.objects:
+                mesh = obj.data if obj.type == 'MESH' else None
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if mesh is not None and mesh.users == 0:
+                    bpy.data.meshes.remove(mesh)
+            raise
+        finally:
+            _SLAB_UPDATE_SUSPENDED = previous_suspend
 
 
 class ARCHIFORGE_OT_slab_from_curve(Operator):
@@ -1024,7 +1136,7 @@ class ARCHIFORGE_OT_slab_from_curve(Operator):
         curve = context.active_object
         pts = _points_from_curve(curve)
         if len(pts) < 3:
-            self.report({'ERROR'}, "Curve needs at least 3 points")
+            self.report({'ERROR'}, _tr("Curve needs at least 3 points"))
             return {'CANCELLED'}
 
         bpy.ops.object.select_all(action='DESELECT')
@@ -1037,7 +1149,7 @@ class ARCHIFORGE_OT_slab_from_curve(Operator):
         props.is_ceiling = (self.slab_use == 'CEILING')
         _fill_vertices_from_points(props, pts)
         _rebuild_slab_mesh(obj, props)
-        self.report({'INFO'}, f"Slab from curve '{curve.name}'")
+        self.report({'INFO'}, _tr("Slab from curve '{}'").format(curve.name))
         return {'FINISHED'}
 
 
@@ -1078,7 +1190,7 @@ class ARCHIFORGE_OT_slab_from_wall(Operator):
         wprops = wall.archiforge_wall
         pts = _points_from_wall(wall)
         if len(pts) < 3:
-            self.report({'ERROR'}, "Could not read wall outline")
+            self.report({'ERROR'}, _tr("Could not read wall outline"))
             return {'CANCELLED'}
 
         z_off = wprops.height if self.ceiling else 0.0
@@ -1101,7 +1213,8 @@ class ARCHIFORGE_OT_slab_from_wall(Operator):
 
         self.report(
             {'INFO'},
-            f"{'Ceiling' if self.ceiling else 'Floor'} slab from '{wall.name}'"
+            _tr("{} slab from '{}'")
+            .format('Ceiling' if self.ceiling else 'Floor', wall.name)
         )
         return {'FINISHED'}
 
@@ -1137,9 +1250,9 @@ class ARCHIFORGE_OT_wall_from_slab(Operator):
                 width=self.width,
                 length=context.active_object.archiforge_slab.width,
             )
-            self.report({'INFO'}, "Wall created from slab dimensions")
+            self.report({'INFO'}, _tr("Wall created from slab dimensions"))
         except Exception as e:
-            self.report({'WARNING'}, f"Could not create wall: {e}")
+            self.report({'WARNING'}, _tr("Could not create wall: {}").format(e))
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -1161,7 +1274,7 @@ class ARCHIFORGE_OT_slab_update(Operator):
     def execute(self, context):
         obj = context.active_object
         _rebuild_slab_mesh(obj, obj.archiforge_slab)
-        self.report({'INFO'}, "Slab updated")
+        self.report({'INFO'}, _tr("Slab updated"))
         return {'FINISHED'}
 
 
@@ -1226,7 +1339,7 @@ class ARCHIFORGE_PT_slab(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MESH_PLANE')
+        self.layout.label(text="", **_icon("slab", 'MESH_PLANE'))
 
     def draw(self, context):
         props  = context.active_object.archiforge_slab
@@ -1239,7 +1352,9 @@ class ARCHIFORGE_PT_slab(Panel):
         col.label(text="Type", icon='MODIFIER')
         col.prop(props, "slab_type", text="")
         col.prop(props, "slab_use", text="Use")
-        col.prop(props, "origin_mode")
+        origin = col.row()
+        origin.enabled = props.slab_type == 'RECTANGLE'
+        origin.prop(props, "origin_mode")
 
         box = layout.box()
         col = box.column(align=True)
@@ -1334,6 +1449,7 @@ classes = [
     AF_SlabHole,
     AF_SlabProperties,
     ARCHIFORGE_OT_slab,
+    ARCHIFORGE_OT_slab_draw,
     ARCHIFORGE_OT_slab_from_curve,
     ARCHIFORGE_OT_slab_from_wall,
     ARCHIFORGE_OT_wall_from_slab,

@@ -35,6 +35,18 @@ from bpy.props         import (
     EnumProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 # Importar snap para integración
 try:
     from . import af_snap
@@ -446,7 +458,7 @@ class ARCHIFORGE_OT_manipulator_toggle(Operator):
         if manip:
             manip.show_manipulators = not manip.show_manipulators
             state = "ON" if manip.show_manipulators else "OFF"
-            self.report({'INFO'}, f"Manipuladores AF: {state}")
+            self.report({'INFO'}, _tr("Manipuladores AF: {}").format(state))
         return {'FINISHED'}
 
 
@@ -462,7 +474,7 @@ class ARCHIFORGE_OT_dimensions_toggle(Operator):
         if manip:
             manip.show_dimensions = not manip.show_dimensions
             state = "ON" if manip.show_dimensions else "OFF"
-            self.report({'INFO'}, f"Etiquetas de Dimensión: {state}")
+            self.report({'INFO'}, _tr("Etiquetas de Dimensión: {}").format(state))
         return {'FINISHED'}
 
 
@@ -481,6 +493,9 @@ class ARCHIFORGE_PT_manipulator(Panel):
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT'
+
+    def draw_header(self, context):
+        self.layout.label(text="", **_icon("manipulator", 'ORIENTATION_GIMBAL'))
 
     def draw(self, context):
         manip  = getattr(context.scene, "af_manipulator", None)

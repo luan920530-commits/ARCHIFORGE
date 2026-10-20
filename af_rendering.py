@@ -22,6 +22,18 @@ from bpy.props import (
     FloatVectorProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -268,14 +280,14 @@ class ARCHIFORGE_OT_render_setup(Operator):
     def execute(self, context):
         rs = getattr(context.scene, "af_render", None)
         if rs is None:
-            self.report({'ERROR'}, "Render settings not available")
+            self.report({'ERROR'}, _tr("Render settings not available"))
             return {'CANCELLED'}
         _apply_render_settings(context, rs)
         if rs.auto_camera and rs.camera_angle != 'CUSTOM':
             cam = _setup_camera_auto(context, rs.camera_angle)
             if cam:
                 context.scene.camera = cam
-        self.report({'INFO'}, "Render settings applied")
+        self.report({'INFO'}, _tr("Render settings applied"))
         return {'FINISHED'}
 
 
@@ -303,7 +315,7 @@ class ARCHIFORGE_OT_render_thumbs(Operator):
 
     def execute(self, context):
         # Stub — en producción renderiza cada preset
-        self.report({'INFO'}, "Thumbnails regenerated (stub)")
+        self.report({'INFO'}, _tr("Thumbnails regenerated (stub)"))
         return {'FINISHED'}
 
 
@@ -320,9 +332,9 @@ class ARCHIFORGE_OT_camera_auto(Operator):
         cam   = _setup_camera_auto(context, angle)
         if cam:
             context.scene.camera = cam
-            self.report({'INFO'}, f"Camera set: {cam.name}")
+            self.report({'INFO'}, _tr("Camera set: {}").format(cam.name))
         else:
-            self.report({'WARNING'}, "No AF objects found to frame")
+            self.report({'WARNING'}, _tr("No AF objects found to frame"))
         return {'FINISHED'}
 
 
@@ -336,7 +348,7 @@ class ARCHIFORGE_OT_set_view_to_camera(Operator):
     def execute(self, context):
         cam = bpy.data.objects.get("AF_Camera")
         if cam is None:
-            self.report({'WARNING'}, "No AF camera found")
+            self.report({'WARNING'}, _tr("No AF camera found"))
             return {'CANCELLED'}
         context.scene.camera = cam
         for area in context.screen.areas:
@@ -365,7 +377,7 @@ class ARCHIFORGE_PT_rendering(Panel):
         return context.mode == 'OBJECT'
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='RENDER_STILL')
+        self.layout.label(text="", **_icon("render", 'RENDER_STILL'))
 
     def draw(self, context):
         rs     = getattr(context.scene, "af_render", None)
@@ -380,7 +392,7 @@ class ARCHIFORGE_PT_rendering(Panel):
         # ── Preset + Engine ───────────────────────────────────
         box = layout.box()
         col = box.column(align=True)
-        col.label(text="Render Mode", icon='RENDER_STILL')
+        col.label(text="Render Mode", **_icon("render", 'RENDER_STILL'))
         col.prop(rs, "preset")
         col.prop(rs, "engine")
 

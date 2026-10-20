@@ -28,6 +28,18 @@ from bpy.props import (
     PointerProperty,
 )
 
+try:
+    from .af_i18n import tr_report as _tr
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _tr(text):
+        return text
+
+try:
+    from .af_icons import icon_kw as _icon
+except ImportError:  # pragma: no cover - fuera del paquete
+    def _icon(name, fallback='MESH_CUBE', icons=None):
+        return {'icon': fallback}
+
 
 # ════════════════════════════════════════════════════════════
 #  CONSTANTES
@@ -651,13 +663,15 @@ class ARCHIFORGE_OT_auto_boolean(Operator):
 
         if processed > 0:
             self.report({'INFO'},
-                        f"✅ Auto Boolean: {processed} objeto(s) procesado(s)")
+                        _tr("✅ Auto Boolean: {} objeto(s) procesado(s)")
+                        .format(processed))
         elif errors > 0:
             self.report({'WARNING'},
-                        f"⚠️  Auto Boolean: {errors} error(es). ¿Hay muros AF cerca?")
+                        _tr("⚠️  Auto Boolean: {} error(es). ¿Hay muros AF cerca?")
+                        .format(errors))
         else:
             self.report({'WARNING'},
-                        "Selecciona puertas o ventanas ArchiForge primero")
+                        _tr("Selecciona puertas o ventanas ArchiForge primero"))
 
         return {'FINISHED'}
 
@@ -668,7 +682,7 @@ class ARCHIFORGE_OT_auto_boolean(Operator):
         layout = self.layout
         layout.use_property_split = True
         col = layout.column(align=True)
-        col.label(text="Boolean Settings", icon='MOD_BOOLEAN')
+        col.label(text="Boolean Settings", **_icon("boolean", 'MOD_BOOLEAN'))
         col.prop(self, "mode")
         col.prop(self, "solver")
 
@@ -696,7 +710,7 @@ class ARCHIFORGE_OT_boolean_clean(Operator):
                 source_obj=obj,
                 remove_cutters=self.remove_cutters,
             )
-        self.report({'INFO'}, "✅ Booleans limpiados")
+        self.report({'INFO'}, _tr("✅ Booleans limpiados"))
         return {'FINISHED'}
 
     def invoke(self, context, event):
@@ -721,8 +735,8 @@ class ARCHIFORGE_OT_boolean_toggle_cutters(Operator):
                     and obj.archiforge_bool.is_af_cutter):
                 obj.hide_set(not self.show)
                 count += 1
-        state = "mostrados" if self.show else "ocultados"
-        self.report({'INFO'}, f"{count} cutters {state}")
+        self.report({'INFO'}, (_tr("{} cutters shown") if self.show
+                               else _tr("{} cutters hidden")).format(count))
         return {'FINISHED'}
 
 
@@ -803,7 +817,8 @@ class ARCHIFORGE_OT_boolean_add_cutter(Operator):
 
         self.report(
             {'INFO'},
-            f"✅ Cutter '{self.cutter_type}' añadido. Muévelo para posicionar el hueco."
+            _tr("✅ Cutter '{}' añadido. Muévelo para posicionar el hueco.")
+            .format(self.cutter_type)
         )
         return {'FINISHED'}
 
@@ -829,7 +844,7 @@ class ARCHIFORGE_OT_boolean_reassign(Operator):
         new_wall   = find_nearest_wall(source_obj)
 
         if new_wall is None:
-            self.report({'WARNING'}, "No se encontró muro cercano")
+            self.report({'WARNING'}, _tr("No se encontró muro cercano"))
             return {'CANCELLED'}
 
         reassigned = 0
@@ -854,7 +869,8 @@ class ARCHIFORGE_OT_boolean_reassign(Operator):
                 reassigned += 1
 
         self.report({'INFO'},
-                    f"✅ {reassigned} boolean(s) reasignados a '{new_wall.name}'")
+                    _tr("✅ {} boolean(s) reasignados a '{}'")
+                    .format(reassigned, new_wall.name))
         return {'FINISHED'}
 
 
@@ -878,7 +894,7 @@ class ARCHIFORGE_PT_boolean(Panel):
         )
 
     def draw_header(self, context):
-        self.layout.label(text="", icon='MOD_BOOLEAN')
+        self.layout.label(text="", **_icon("boolean", 'MOD_BOOLEAN'))
 
     def draw(self, context):
         obj      = context.active_object
@@ -901,7 +917,7 @@ class ARCHIFORGE_PT_boolean(Panel):
         row = col.row(align=True)
         row.operator(
             "archiforge.auto_boolean",
-            text="Auto Boolean", icon='MOD_BOOLEAN',
+            text="Auto Boolean", **_icon("boolean", 'MOD_BOOLEAN'),
         ).mode = bool_mgr.mode
 
         col.separator(factor=0.3)
