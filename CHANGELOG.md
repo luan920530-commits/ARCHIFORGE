@@ -5,6 +5,50 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.14.0] — 2026-10-20 — Extensión para Blender 4.2+ (blender_manifest.toml)
+
+### Agregado
+- **`blender_manifest.toml`** en la raíz: `id = "archiforge"`, `schema_version`
+  1.0.0, `type = "add-on"`, `blender_version_min = "4.2.0"`, licencia
+  `SPDX:GPL-3.0-or-later`, etiquetas oficiales (*Add Mesh, Modeling, Object,
+  3D View*), permiso `files` (presets y CSV; el addon no usa red) y sección
+  `[build]` que excluye `tests/`, `dist/`, los scripts `patch_*.py` e
+  `icons/generate_icons.py`. `blender --command extension build` produce
+  `archiforge-<versión>.zip` listo para
+  [extensions.blender.org/submit](https://extensions.blender.org/submit/);
+  el paquete se validó con el CLI oficial `blender_ext.py` de Blender 4.2.9
+  y 5.2.2 (`validate` → OK, 162 archivos, 1,2 MB).
+- `tests/test_extension_manifest.py`: el manifiesto debe coincidir con
+  `bl_info` (versión, nombre, autor, web), cumplir las reglas del validador
+  (tagline ≤ 64 caracteres sin punto final, etiquetas oficiales, claves de
+  permisos válidas, `blender_version_min` ≥ 4.2.0), excluir los archivos de
+  desarrollo existentes y los helpers deben resolver el paquete
+  `bl_ext.<repo>.archiforge` (155 pruebas). Nuevo job de CI que descarga el
+  CLI oficial y ejecuta `build` + `validate` en Python 3.11.
+
+### Corregido
+- **Carga como extensión**: Blender 4.2+ elimina `bl_info` del módulo antes
+  de `register()`; `__init__.py` leía `bl_info["version"]` en `register()`
+  y en las preferencias (→ `NameError`). Ahora la versión se captura al
+  importar en `ADDON_VERSION` / `ADDON_VERSION_STR`.
+- `af_icons` y `af_i18n` recortaban `__package__` en el primer punto, lo que
+  en una extensión (`bl_ext.user_default.archiforge`) apuntaba a `bl_ext`:
+  los iconos propios no se encontraban y la clave de preferencias era
+  incorrecta. Se usa el nombre completo del paquete.
+- Principled BSDF en Blender 4.0+: los sockets *Transmission* y *Emission*
+  pasaron a llamarse *Transmission Weight* y *Emission Color*; los ajustes
+  de vidrio y luminarias de baño, eléctrico, muebles, cocina, decoración,
+  aberturas y estructura prueban ambos nombres.
+
+### Notas
+- `bl_info` se conserva para Blender 3.3–4.1 (instalación legacy). En 4.2+
+  Blender lo ignora y usa el manifiesto; `maintainer` lleva solo el nombre
+  del equipo (añada su correo antes de enviar a la plataforma si lo desea).
+- La verificación en Blender 4.2+ real queda a cargo del autor; aquí solo se
+  comprobó con el validador oficial y el stub headless.
+
+---
+
 ## [1.13.0] — 2026-10-20 — Iconografía completa
 
 ### Agregado

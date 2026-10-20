@@ -2,8 +2,8 @@
 
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
-[![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.13.0-blue)](CHANGELOG.md)
+[![Blender](https://img.shields.io/badge/Blender-3.3_LTS_%E2%80%93_4.2%2B_extension-orange)](https://www.blender.org)
+[![Version](https://img.shields.io/badge/version-1.14.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -242,7 +242,9 @@ en medidas comerciales colombianas.
 
 ## 📋 Requisitos
 
-- **Blender 3.3 LTS o posterior** (3.3 es la versión mínima declarada en el addon).
+- **Blender 3.3 LTS o posterior** (3.3 es la versión mínima declarada en
+  `bl_info`). Como **extensión** (`blender_manifest.toml`) el mínimo es
+  **Blender 4.2 LTS**, que es cuando aparece el sistema de extensiones.
   La compatibilidad real debe verificarse en la versión de Blender de destino;
   no se incluye Blender en las pruebas automatizadas del repositorio.
 - Sin dependencias externas: solo Blender + Python estándar
@@ -272,6 +274,27 @@ git clone https://github.com/luan920530-commits/ARCHIFORGE.git ArchiForge
 ```
 Con el addon cargado, `F8` en Blender recarga scripts. El hot-reload intenta
 desregistrar las clases y callbacks anteriores antes de recargar módulos.
+
+### Blender 4.2+ — instalar como extensión
+
+El repositorio incluye `blender_manifest.toml` (id `archiforge`,
+`blender_version_min = "4.2.0"`), así que el mismo código funciona como
+**extensión** de Blender 4.2 LTS o posterior y puede publicarse en
+[extensions.blender.org](https://extensions.blender.org/submit/):
+
+```bash
+# desde la raíz del repositorio; genera archiforge-<versión>.zip
+blender --command extension build
+blender --command extension validate archiforge-1.14.0.zip
+```
+
+El paquete deja `blender_manifest.toml` en la raíz del ZIP y excluye
+`tests/`, scripts de desarrollo y `icons/generate_icons.py` (ver `[build]`
+en el manifiesto). Instálelo arrastrando el ZIP a la ventana de Blender o con
+`Preferences → Get Extensions → ⌄ → Install from Disk…`. En Blender 3.3–4.1
+siga usando las opciones A–C (`bl_info` se conserva para ese caso; Blender
+4.2+ lo ignora y lee el manifiesto). El addon no usa red; declara el permiso
+`files` porque guarda presets y exporta CSV.
 
 > 💡 **Actualizando desde una versión anterior**: haga copia de su carpeta
 > `ArchiForge`, copie los archivos nuevos encima y desactive/reactive
@@ -316,7 +339,8 @@ editor de shaders y el cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.13.0)
+├── blender_manifest.toml # Manifiesto de extensión Blender 4.2+ (extensions.blender.org)
+├── __init__.py          # Registro, panel lateral, menú Shift+A, preferencias (v1.14.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_i18n.py           # Idioma del addon: tablas para bpy.app.translations (v1.11)
 ├── af_icons.py          # Helper de iconos propios: icon_kw(), ITEM_ICONS, OBJECT_ICONS (v1.13)
@@ -359,6 +383,7 @@ ArchiForge/
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.14.0** — Extensión para Blender 4.2+: `blender_manifest.toml` validado con el CLI oficial, versión única `ADDON_VERSION`, resolución del paquete `bl_ext.*` en iconos e idioma y nombres de sockets del Principled BSDF 4.x
 - **v1.13.0** — Iconografía completa: 88 iconos nuevos (112 en total) para funciones y cada ítem de los catálogos, helper `af_icons.py` y menús/paneles/preferencias con iconos propios
 - **v1.12.0** — Materiales procedurales de nodos, sistema de unidades métrico/imperial efectivo, mensajes de estado traducidos, anotaciones (cotas, ejes, norte), conjuntos baño CO / apartamento demo y unificación de los módulos de escaleras
 - **v1.11.0** — Idioma del addon English/Español operativo: traduce paneles, operadores, propiedades, desplegables y descripciones sin cambiar el idioma de Blender

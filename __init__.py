@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 13, 0),
+    "version"     : (1, 14, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -42,8 +42,17 @@ bl_info = {
     "category"    : "Add Mesh",
 }
 
+# Versión capturada al importar: cuando el addon se instala como *extensión*
+# (Blender 4.2+, blender_manifest.toml) Blender elimina ``bl_info`` del módulo
+# antes de llamar a ``register()``, así que nunca debe leerse en tiempo de
+# ejecución. Debe coincidir con ``version`` del manifiesto (lo exige un test).
+ADDON_VERSION = tuple(bl_info["version"])
+ADDON_VERSION_STR = ".".join(str(v) for v in ADDON_VERSION)
+
 __all__ = [
     "bl_info",
+    "ADDON_VERSION",
+    "ADDON_VERSION_STR",
     "register",
     "unregister",
     "get_icons",
@@ -642,7 +651,7 @@ class ArchiForge_Pref(AddonPreferences):
     # ────────────────────────────────────────────────────────
     def draw(self, context):
         layout = self.layout
-        ver = ".".join(str(v) for v in bl_info.get("version", (1, 0, 0)))
+        ver = ADDON_VERSION_STR
 
         # ── Header con logo ─────────────────────────────────
         box = layout.box()
@@ -1576,7 +1585,7 @@ _own_classes = [
 # ════════════════════════════════════════════════════════════
 def register():
     global AF_LOG_LEVEL
-    ver = ".".join(str(v) for v in bl_info.get("version", (1, 0, 0)))
+    ver = ADDON_VERSION_STR
 
     # ── Cargar íconos primero ────────────────────────────────
     try:

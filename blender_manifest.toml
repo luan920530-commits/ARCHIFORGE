@@ -1,0 +1,56 @@
+# Blender extension manifest — https://extensions.blender.org
+# Required for Blender 4.2+ "Install from Disk" / drag-and-drop and for the
+# extensions platform. Blender 3.3–4.1 keep using ``bl_info`` (legacy add-on).
+#
+# Build the upload package from the repository root with:
+#     blender --command extension build
+# → archiforge-<version>.zip (then validate: blender --command extension validate archiforge-<version>.zip)
+#
+# Keep ``version`` identical to ``bl_info["version"]`` in __init__.py
+# (tests/test_extension_manifest.py enforces it).
+
+schema_version = "1.0.0"
+
+id = "archiforge"
+version = "1.14.0"
+name = "ArchiForge"
+tagline = "Parametric walls, slabs, roofs, stairs, openings and interiors"
+maintainer = "ArchiForge Devs"
+type = "add-on"
+
+website = "https://github.com/luan920530-commits/ARCHIFORGE"
+
+# Allowed add-on tags: 3D View, Add Curve, Add Mesh, Animation, Bake, Camera,
+# Compositing, Development, Game Engine, Geometry Nodes, Grease Pencil,
+# Import-Export, Lighting, Material, Mesh, Modeling, Node, Object, Paint,
+# Physics, Pipeline, Render, Rigging, Scene, Sculpt, Sequencer, System,
+# Text Editor, Tracking, User Interface, UV.
+tags = ["Add Mesh", "Modeling", "Object", "3D View"]
+
+# Extensions exist since Blender 4.2 LTS.
+blender_version_min = "4.2.0"
+
+license = [
+  "SPDX:GPL-3.0-or-later",
+]
+
+copyright = [
+  "2026 ArchiForge Devs",
+]
+
+# Declared so reviewers and users know why the add-on touches the disk.
+[permissions]
+files = "Save/load presets and export CSV bills of quantities"
+
+[build]
+paths_exclude_pattern = [
+  "__pycache__/",
+  ".*",
+  "/*.zip",
+  "*.blend[1-9]",
+  "/tests/",
+  "/dist/",
+  "/patch_door_co.py",
+  "/patch_window_co.py",
+  "/icons/generate_icons.py",
+]

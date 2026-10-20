@@ -93,8 +93,13 @@ def tr(text, language):
 
 
 def _addon_name():
-    """Top-level package name, which is also the key in preferences.addons."""
-    return (__package__ or "ArchiForge").split(".")[0]
+    """Add-on package name, which is also the key in ``preferences.addons``.
+
+    ``ArchiForge`` when installed as a legacy add-on and
+    ``bl_ext.<repository>.archiforge`` when installed as a Blender 4.2+
+    extension (never truncate at the first dot).
+    """
+    return __package__ or "ArchiForge"
 
 
 def active_language():

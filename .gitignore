@@ -10,3 +10,7 @@ __pycache__/
 *.blend2
 *.blend@
 *.blend.autosave
+
+# Extension packages built with `blender --command extension build`
+*.zip
+/dist/
