@@ -293,3 +293,36 @@ def polygon_boundary_edges(fragments):
         elif direction < 0:
             boundary.append((end, start))
     return boundary
+
+
+# ── Juntas (grout) ────────────────────────────────────────────
+# The three grout styles must produce different prisms: flush with the tile
+# surface, standing proud of it, or recessed below it.
+GROUT_STYLES = ('FLAT', 'RAISED', 'RECESSED')
+
+# Patterns whose joints are generated as explicit grout prisms. The other
+# patterns only leave a gap between pieces.
+GROUT_GEOMETRY_PATTERNS = ('REGULAR', 'OFFSET')
+
+MIN_JOINT_THICKNESS = 0.001
+
+
+def grout_joint_thickness(style, tile_thickness, grout_depth,
+                          minimum=MIN_JOINT_THICKNESS):
+    """Height of a joint prism (measured from the tile bed) for ``style``.
+
+    ``FLAT`` joints finish flush with the tile surface, ``RAISED`` joints
+    stand ``grout_depth`` above it and ``RECESSED`` joints sit
+    ``grout_depth`` below it (never thinner than ``minimum``).
+    """
+    thickness = float(tile_thickness)
+    depth = max(float(grout_depth), 0.0)
+    if style == 'FLAT':
+        height = thickness
+    elif style == 'RAISED':
+        height = thickness + depth
+    elif style == 'RECESSED':
+        height = thickness - depth
+    else:
+        raise ValueError("Unknown grout style: {!r}".format(style))
+    return max(height, float(minimum))

@@ -374,9 +374,12 @@ class AF_OpeningGenerator:
             self._win_leaf(m, 0 if sgn > 0 else -(xb - xa),
                            (xb - xa) if sgn > 0 else 0, zl0,
                            zl1, 0.04, frm, gla)
-            hx = xb - 0.09 if sgn > 0 else xa + 0.09
-            self.box_c(hx, -0.03, (zl0 + zl1) / 2, 0.02, 0.03,
-                       0.14, met)
+            # The handle rides on the leaf: express it in hinge-local
+            # coordinates and apply the same transform as the sash.
+            hx = (xb - 0.09 if sgn > 0 else xa + 0.09) - xh
+            zc = (zl0 + zl1) / 2
+            self.box_t(m, hx - 0.01, hx + 0.01, -0.045, -0.015,
+                       zc - 0.07, zc + 0.07, met)
         if p.sill_board:
             self._sillboard(w, d, z0, frm)
         if p.lintel:

@@ -6,6 +6,9 @@
 # ║         GPL v3 — ArchiForge Devs                        ║
 # ╚══════════════════════════════════════════════════════════╝
 # v1.1 — presets CO (ventanería aluminio Colombia)
+# v1.2 — hojas batientes/proyectantes giran completas (marco, vidrio y
+#        divisiones) alrededor de la bisagra; bisagras físicas sobre el eje;
+#        el toggle abrir/cerrar solo se ofrece en CASEMENT y AWNING.
 
 # <pep8 compliant>
 
@@ -31,6 +34,13 @@ from bpy.props import (
 
 from . import af_autoboolean
 from . import af_material
+from .af_window_geometry import (
+    hinge_knuckle_length,
+    hinge_positions,
+    rotate_point,
+    sash_hinge,
+    window_type_can_open,
+)
 
 
 # ════════════════════════════════════════════════════════════
@@ -63,6 +73,18 @@ AF_SILL_TYPES = [
     ('FLAT',   "Flat",   "Simple flat sill"),
     ('SLOPED', "Sloped", "Sloped drip sill"),
     ('MOLDED', "Molded", "Molded decorative sill"),
+]
+
+AF_WIN_HINGE_SIDES = [
+    ('LEFT',  "Left",  "First leaf hinged on the left jamb "
+                       "(adjacent leaves alternate)"),
+    ('RIGHT', "Right", "First leaf hinged on the right jamb "
+                       "(adjacent leaves alternate)"),
+]
+
+AF_WIN_SWING_DIRECTIONS = [
+    ('OUT', "Outward", "Leaf projects to the exterior (-Y)"),
+    ('IN',  "Inward",  "Leaf swings into the room (+Y)"),
 ]
 
 AF_WIN_CO_PRESETS = [
@@ -180,8 +202,32 @@ class AF_WindowProperties(PropertyGroup):
 
     open_angle : FloatProperty(
         name="Open Angle", default=0.0,
+        description="Rotation of hinged sashes (CASEMENT / AWNING only)",
         min=0.0, max=math.radians(90),
         subtype='ANGLE', update=lambda s, c: af_window_update(s, c),
+    )
+    hinge_side : EnumProperty(
+        name="Hinge Side", items=AF_WIN_HINGE_SIDES, default='LEFT',
+        description="Hinge jamb of the first casement leaf",
+        update=lambda s, c: af_window_update(s, c),
+    )
+    swing_direction : EnumProperty(
+        name="Swing", items=AF_WIN_SWING_DIRECTIONS, default='OUT',
+        description="Direction in which casement leaves open",
+        update=lambda s, c: af_window_update(s, c),
+    )
+    hinge_enable : BoolProperty(
+        name="Hinges", default=True,
+        description="Generate hinge knuckles centred on the rotation axis",
+        update=lambda s, c: af_window_update(s, c),
+    )
+    hinge_radius : FloatProperty(
+        name="Hinge Radius", default=0.006, min=0.003, max=0.02,
+        unit='LENGTH', update=lambda s, c: af_window_update(s, c),
+    )
+    hinge_length : FloatProperty(
+        name="Hinge Length", default=0.06, min=0.02, max=0.20,
+        unit='LENGTH', update=lambda s, c: af_window_update(s, c),
     )
 
     arch_height   : FloatProperty(
@@ -266,6 +312,7 @@ class AF_WindowProperties(PropertyGroup):
     mat_inner_sill : IntProperty(name="Inner Sill Material", default=4, min=0)
     mat_shutter    : IntProperty(name="Shutter Material",    default=5, min=0)
     mat_bars       : IntProperty(name="Bars Material",       default=6, min=0)
+    mat_hinge      : IntProperty(name="Hinge Material",      default=6, min=0)
 
 
 # ════════════════════════════════════════════════════════════
@@ -420,10 +467,11 @@ class AF_WindowGenerator:
 
         y_sash_outer = off + fd / 2.0 - sd
         y_sash_inner = off + fd / 2.0
-        y_glass      = off
+        # The glazing sits in the middle of the sash depth so it travels
+        # with the sash when the leaf rotates.
+        y_glass      = (y_sash_outer + y_sash_inner) / 2.0
 
         z_base = sh
-        z_top  = sh + h
 
         pane_w = w / vpa
         pane_h = h / hpa
@@ -435,21 +483,109 @@ class AF_WindowGenerator:
                 pz0 = z_base + row * pane_h + (mw / 2 if row > 0 else 0)
                 pz1 = z_base + (row + 1) * pane_h - (mw / 2 if row < hpa - 1 else 0)
 
-                self._box(px0, px0+sw, y_sash_outer, y_sash_inner, pz0, pz1, mi_sash)
-                self._box(px1-sw, px1, y_sash_outer, y_sash_inner, pz0, pz1, mi_sash)
-                self._box(px0, px1, y_sash_outer, y_sash_inner, pz0, pz0+sw, mi_sash)
-                self._box(px0, px1, y_sash_outer, y_sash_inner, pz1-sw, pz1, mi_sash)
-
-                self._glass_pane(
-                    px0+sw, px1-sw, pz0+sw, pz1-sw,
-                    y_glass, gt, mi_glass
+                self._build_sash_leaf(
+                    col, px0, px1, pz0, pz1,
+                    y_sash_outer, y_sash_inner, y_glass,
+                    sw, gt, mi_sash, mi_glass,
                 )
 
-                if p.sash_style in ('DIVIDED', 'COLONIAL'):
-                    self._build_grille(
-                        px0+sw, px1-sw, pz0+sw, pz1-sw,
-                        y_glass, gt, mi_sash
-                    )
+    def _build_sash_leaf(self, col, px0, px1, pz0, pz1,
+                         y_sash_outer, y_sash_inner, y_glass,
+                         sw, gt, mi_sash, mi_glass):
+        """Build one leaf closed, then rotate every new vertex as a rigid body.
+
+        Stiles, rails, glass and grille are created in the closed position;
+        the vertex range added here is rotated afterwards around the hinge
+        axis returned by ``sash_hinge`` so the whole leaf swings together.
+        Hinge knuckles are generated last, centred on that same axis, and
+        therefore stay fixed to the frame.
+        """
+        p  = self.props
+        bm = self.bm
+
+        hinge = sash_hinge(
+            p.window_type, px0, px1, pz0, pz1,
+            y_sash_outer, y_sash_inner, p.open_angle,
+            hinge_side=p.hinge_side, column=col,
+            swing=p.swing_direction,
+        )
+
+        bm.verts.ensure_lookup_table()
+        n_before = len(bm.verts)
+
+        self._box(px0, px0+sw, y_sash_outer, y_sash_inner, pz0, pz1, mi_sash)
+        self._box(px1-sw, px1, y_sash_outer, y_sash_inner, pz0, pz1, mi_sash)
+        self._box(px0, px1, y_sash_outer, y_sash_inner, pz0, pz0+sw, mi_sash)
+        self._box(px0, px1, y_sash_outer, y_sash_inner, pz1-sw, pz1, mi_sash)
+
+        self._glass_pane(
+            px0+sw, px1-sw, pz0+sw, pz1-sw,
+            y_glass, gt, mi_glass
+        )
+
+        if p.sash_style in ('DIVIDED', 'COLONIAL'):
+            self._build_grille(
+                px0+sw, px1-sw, pz0+sw, pz1-sw,
+                y_glass, gt, mi_sash
+            )
+
+        if hinge is not None:
+            self._rotate_verts_since(n_before, hinge)
+            if p.hinge_enable:
+                self._build_hinges(hinge, px0, px1, pz0, pz1)
+
+    def _rotate_verts_since(self, n_before, hinge):
+        """Apply the leaf rotation to every vertex created after ``n_before``."""
+        if hinge is None or abs(hinge.angle) < 1e-6:
+            return
+        bm = self.bm
+        bm.verts.ensure_lookup_table()
+        for i in range(n_before, len(bm.verts)):
+            v = bm.verts[i]
+            v.co = Vector(rotate_point((v.co.x, v.co.y, v.co.z), hinge))
+
+    def _build_hinges(self, hinge, px0, px1, pz0, pz1):
+        """Knuckles centred on the hinge axis (never rotated with the leaf)."""
+        p      = self.props
+        length = hinge_knuckle_length(
+            hinge, px0, px1, pz0, pz1, p.hinge_length)
+        if length < 0.004:
+            return
+        for center in hinge_positions(hinge, px0, px1, pz0, pz1):
+            self._cylinder(center, hinge.axis, p.hinge_radius, length,
+                           mat_idx=p.mat_hinge)
+
+    def _cylinder(self, center, axis, radius, length, segments=12,
+                  mat_idx=0):
+        """Closed cylinder whose centre line runs along ``axis`` ('X'|'Z')."""
+        bm = self.bm
+        if radius < 1e-5 or length < 1e-5:
+            return
+        cx, cy, cz = center
+        half   = length / 2.0
+        step   = 2.0 * math.pi / segments
+        ring_a = []
+        ring_b = []
+        for i in range(segments):
+            a = i * step
+            u = radius * math.cos(a)
+            v = radius * math.sin(a)
+            if axis == 'Z':
+                ring_a.append(bm.verts.new(Vector((cx + u, cy + v, cz - half))))
+                ring_b.append(bm.verts.new(Vector((cx + u, cy + v, cz + half))))
+            else:
+                ring_a.append(bm.verts.new(Vector((cx - half, cy + u, cz + v))))
+                ring_b.append(bm.verts.new(Vector((cx + half, cy + u, cz + v))))
+        bm.verts.ensure_lookup_table()
+
+        for i in range(segments):
+            j = (i + 1) % segments
+            f = bm.faces.new([ring_a[i], ring_a[j], ring_b[j], ring_b[i]])
+            f.material_index = mat_idx
+        f = bm.faces.new(list(reversed(ring_a)))
+        f.material_index = mat_idx
+        f = bm.faces.new(ring_b)
+        f.material_index = mat_idx
 
     def _build_grille(self, x0, x1, z0, z1, y_center, gt, mi):
         p      = self.props
@@ -984,7 +1120,8 @@ class ARCHIFORGE_OT_window_apply_boolean(Operator):
 class ARCHIFORGE_OT_window_toggle_open(Operator):
     bl_idname      = "archiforge.window_toggle_open"
     bl_label       = "Toggle Open/Closed"
-    bl_description = "Toggle window between open and closed state"
+    bl_description = ("Toggle hinged sashes between open and closed "
+                      "(casement and awning windows only)")
     bl_options     = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -994,7 +1131,7 @@ class ARCHIFORGE_OT_window_toggle_open(Operator):
             obj is not None and obj.type == 'MESH'
             and hasattr(obj, AF_WIN_PROP)
             and obj.archiforge_window.is_af_window
-            and obj.archiforge_window.window_type != 'FIXED'
+            and window_type_can_open(obj.archiforge_window.window_type)
         )
 
     def execute(self, context):
@@ -1089,14 +1226,26 @@ class ARCHIFORGE_PT_window(Panel):
             col.prop(props, "arch_height")
             col.prop(props, "arch_segments")
 
-        if props.window_type != 'FIXED':
+        # Only hinged types rotate their sashes; sliding, double-hung,
+        # fixed and arch windows never expose the open/close controls.
+        if window_type_can_open(props.window_type):
             box = layout.box()
             col = box.column(align=True)
             col.label(text="Opening", icon='DRIVER_ROTATIONAL_DIFFERENCE')
             col.prop(props, "open_angle")
+            if props.window_type == 'CASEMENT':
+                col.prop(props, "hinge_side", text="Hinge")
+                col.prop(props, "swing_direction", text="Swing")
+            else:
+                col.label(text="Top hinge, projects outward", icon='INFO')
             col.operator("archiforge.window_toggle_open",
                          text="Toggle Open / Closed",
                          icon='DRIVER_ROTATIONAL_DIFFERENCE')
+            col.separator(factor=0.3)
+            col.prop(props, "hinge_enable", text="Hinges")
+            if props.hinge_enable:
+                col.prop(props, "hinge_radius")
+                col.prop(props, "hinge_length")
 
         box = layout.box()
         row = box.row(align=True)
@@ -1158,6 +1307,8 @@ class ARCHIFORGE_PT_window(Panel):
             col.prop(props, "mat_shutter",    text="Shutters")
         if props.bars_enable:
             col.prop(props, "mat_bars",       text="Bars")
+        if props.hinge_enable and window_type_can_open(props.window_type):
+            col.prop(props, "mat_hinge",      text="Hinges")
 
         box = layout.box()
         col = box.column(align=True)

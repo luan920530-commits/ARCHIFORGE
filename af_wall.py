@@ -15,6 +15,13 @@ import math
 from mathutils import Vector, Matrix
 
 from .af_wall_path import build_wall_segments, offset_polyline
+from .af_construction_presets import (
+    CUSTOM_PRESET,
+    WALL_PRESET_NOTE,
+    preset_for_wall_thickness,
+    wall_preset_items,
+    wall_preset_thickness,
+)
 
 from bpy.types import (
     PropertyGroup,
@@ -45,6 +52,10 @@ AF_WALL_MAX_WIDTH  = 10.0
 
 AF_WALL_PROP = "archiforge_wall"
 _WALL_UPDATE_SUSPENDED = False
+
+# Construction-system references (editable starting thickness only; the
+# wall is still generated as one solid without bond patterns or layers).
+AF_WALL_PRESETS = wall_preset_items()
 AF_WALL_DRAW_MAX_POINTS = 64
 AF_WALL_DRAW_CLOSE_PIXELS = 14
 
@@ -104,7 +115,17 @@ class AF_WallProperties(PropertyGroup):
         min         = AF_WALL_MIN_WIDTH,
         max         = AF_WALL_MAX_WIDTH,
         unit        = 'LENGTH',
-        update      = lambda self, ctx: af_wall_update(self, ctx),
+        update      = lambda self, ctx: af_wall_width_update(self, ctx),
+    )
+
+    wall_preset : EnumProperty(
+        name        = "Construction Reference",
+        description = ("Reference construction system; sets an editable "
+                       "starting thickness and returns to Custom when the "
+                       "thickness is edited. " + WALL_PRESET_NOTE),
+        items       = AF_WALL_PRESETS,
+        default     = CUSTOM_PRESET,
+        update      = lambda self, ctx: af_wall_preset_update(self, ctx),
     )
 
     n_parts : IntProperty(
@@ -398,6 +419,33 @@ def af_wall_update(self, context):
     _rebuild_wall_mesh(obj, props)
 
 
+def af_wall_preset_update(self, context):
+    """Apply the preset's reference thickness (the user can edit it after)."""
+    global _WALL_UPDATE_SUSPENDED
+    thickness = wall_preset_thickness(self.wall_preset)
+    if thickness is None:
+        # CUSTOM keeps the current thickness untouched.
+        return
+    previous_suspend = _WALL_UPDATE_SUSPENDED
+    _WALL_UPDATE_SUSPENDED = True
+    try:
+        self.width = thickness
+    finally:
+        _WALL_UPDATE_SUSPENDED = previous_suspend
+    af_wall_update(self, context)
+
+
+def af_wall_width_update(self, context):
+    """Manual thickness edits drop the preset label back to Custom."""
+    if _WALL_UPDATE_SUSPENDED:
+        return
+    expected = preset_for_wall_thickness(self.wall_preset, self.width)
+    if expected != self.wall_preset:
+        # Assigning CUSTOM does not rebuild (no thickness to apply).
+        self.wall_preset = expected
+    af_wall_update(self, context)
+
+
 def af_wall_parts_update(self, context):
     if _WALL_UPDATE_SUSPENDED:
         return
@@ -511,12 +559,20 @@ class ARCHIFORGE_OT_wall(Operator):
                            min=AF_WALL_MIN_WIDTH,  unit='LENGTH')
     length : FloatProperty(name="Length", default=2.0,
                            min=AF_WALL_MIN_LEN,    unit='LENGTH')
+    wall_preset : EnumProperty(
+        name="Construction Reference", items=AF_WALL_PRESETS,
+        default=CUSTOM_PRESET,
+        description="Reference system whose thickness replaces Width. "
+                    + WALL_PRESET_NOTE,
+    )
 
     def execute(self, context):
         bpy.ops.object.select_all(action='DESELECT')
         obj, props = _create_wall_object(context, "AF_Wall")
+        thickness = wall_preset_thickness(self.wall_preset)
         props.height          = self.height
-        props.width           = self.width
+        props.width           = self.width if thickness is None else thickness
+        props.wall_preset     = self.wall_preset
         props.parts[0].length = self.length
         _rebuild_wall_mesh(obj, props)
         self.report({'INFO'}, f"ArchiForge Wall created: {obj.name}")
@@ -579,6 +635,12 @@ class ARCHIFORGE_OT_wall_draw(Operator):
     width: FloatProperty(
         name="Thickness", default=0.20, min=AF_WALL_MIN_WIDTH,
         max=AF_WALL_MAX_WIDTH, unit='LENGTH',
+    )
+    wall_preset: EnumProperty(
+        name="Construction Reference", items=AF_WALL_PRESETS,
+        default=CUSTOM_PRESET,
+        description="Reference system whose thickness replaces Thickness. "
+                    + WALL_PRESET_NOTE,
     )
 
     @classmethod
@@ -764,8 +826,10 @@ class ARCHIFORGE_OT_wall_draw(Operator):
                     props.parts.add()
                 while len(props.parts) > segment_count:
                     props.parts.remove(len(props.parts) - 1)
+                thickness = wall_preset_thickness(self.wall_preset)
                 props.height = self.height
-                props.width = self.width
+                props.width = self.width if thickness is None else thickness
+                props.wall_preset = self.wall_preset
                 props.closed = closed
                 props.is_af_wall = True
                 props.object_name = obj.name
@@ -993,7 +1057,12 @@ class ARCHIFORGE_PT_wall(Panel):
         col = box.column(align=True)
         col.label(text="Dimensions", icon='ARROW_LEFTRIGHT')
         col.prop(props, "height")
+        col.prop(props, "wall_preset", text="Reference")
         col.prop(props, "width")
+        if props.wall_preset != CUSTOM_PRESET:
+            col.label(text="Reference thickness, editable - single solid, "
+                           "no bond or layers",
+                      icon='INFO')
 
         # ── Opciones ──────────────────────────────────────────
         box = layout.box()

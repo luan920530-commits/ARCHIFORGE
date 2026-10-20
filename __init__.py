@@ -32,7 +32,7 @@ bl_info = {
                      "(walls, doors, windows, stairs, slabs, roofs, bathroom, electrical...)",
     "author"      : "ArchiForge Devs",
     "license"     : "GPL",
-    "version"     : (1, 9, 0),
+    "version"     : (1, 10, 0),
     "blender"     : (3, 3, 0),
     "location"    : "View3D > Sidebar > ArchiForge | Shift+A > Mesh > ArchiForge",
     "warning"     : "",
@@ -110,6 +110,8 @@ if "bpy" in locals():
         "af_room_assets",
         "af_wall_path",
         "af_floor_geometry",
+        "af_window_geometry",
+        "af_construction_presets",
         "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",
@@ -180,6 +182,8 @@ else:
         "af_room_assets",
         "af_wall_path",
         "af_floor_geometry",
+        "af_window_geometry",
+        "af_construction_presets",
         "af_outline_draw",
         # 3. Objetos paramétricos
         "af_wall",

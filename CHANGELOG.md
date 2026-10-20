@@ -5,6 +5,62 @@ Todos los cambios notables del proyecto. Formato basado en
 
 ---
 
+## [1.10.0] — 2026-10-20 — Ventanas abatibles, formatos de piso y referencias de muro
+
+### Agregado
+- Ventanas **Casement** y **Awning**: propiedades **Hinge Side**
+  (izquierda/derecha), **Swing** (hacia fuera/hacia dentro) y **Hinges** con
+  radio y longitud. Los pernios se generan centrados sobre el eje de giro de
+  cada hoja y no rotan con ella; con varias hojas abatibles las bisagras se
+  alternan para que los cantos libres coincidan en el centro.
+- Pisos: selector **Tile Format** con los formatos comerciales **30 × 30,
+  45 × 45, 60 × 60 y 60 × 120 cm**, disponible en el diálogo de creación y en
+  **Floor Properties**. El preset carga las medidas y estas siguen siendo
+  editables; cualquier cambio manual devuelve el selector a *Custom*.
+- Muros: selector **Construction Reference** con espesores iniciales para
+  **entramado de madera (11.5 cm), ladrillo (15 cm), concreto (25 cm) y bloque
+  estructural (20 cm)**, disponible al crear, al dibujar con **Draw Wall /
+  Room** y en **Wall Properties**. Son referencias editables, no exigencias
+  normativas; el panel lo indica y el muro sigue siendo un único sólido sin
+  aparejo ni capas. Editar el espesor a mano devuelve la referencia a
+  *Custom*.
+- Módulos puros `af_window_geometry.py` (cinemática de hojas y bisagras) y
+  `af_construction_presets.py` (catálogo de formatos y espesores);
+  `grout_joint_thickness` en `af_floor_geometry.py`.
+- Pruebas: `tests/test_window_geometry.py`,
+  `tests/test_construction_presets.py`, nuevos casos en
+  `tests/test_floor_geometry.py` y `tests/blender_stub.py`, un sustituto
+  mínimo de `bpy`/`bmesh`/`mathutils` que permite ejecutar los generadores
+  reales de ventanas y pisos sin Blender y comprobar sus coordenadas.
+
+### Cambiado
+- Los estilos de junta **Flat / Raised / Recessed** generan geometría
+  distinta en los patrones **Regular** y **Offset**: la junta queda a ras de
+  la baldosa, sobresale o se hunde según **Grout Depth**. Antes los tres
+  estilos producían la misma junta rehundida. Los demás patrones siguen sin
+  modelar prismas de junta y el panel lo indica.
+- La **losa base** del piso ocupa `0..Base Thickness` y las piezas, juntas y
+  bordes se apoyan sobre ella; antes compartían la cota de origen y la base se
+  superponía a las baldosas. Aplica también a contornos personalizados y a
+  **Floor from Curve**.
+
+### Corregido
+- **Open Angle** ahora mueve la geometría de las ventanas abatibles y
+  proyectantes: la hoja completa —marco de hoja, vidrio y divisiones
+  (grille)— gira alrededor de la bisagra. Antes el ángulo y el botón de
+  apertura cambiaban la propiedad sin modificar la malla y el vidrio se
+  generaba en el centro del marco, fuera del espesor de la hoja. El eje pasa
+  por la arista exterior o interior del montante según **Swing**, de modo que
+  el montante no atraviesa la jamba al abrir.
+- El botón **Toggle Open / Closed** y los controles de apertura solo se
+  ofrecen para ventanas abatibles y proyectantes; antes aparecían en todos los
+  tipos salvo el fijo. Las fijas, corredizas, de guillotina y de arco ignoran
+  **Open Angle** y no generan bisagras.
+- La manija de las ventanas abatibles paramétricas (`af_openings.py`) se
+  ubica en coordenadas locales de la hoja y acompaña su giro.
+
+---
+
 ## [1.9.0] — 2026-10-19 — Idioma del addon y correcciones de puertas
 
 ### Agregado

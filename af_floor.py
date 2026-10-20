@@ -27,7 +27,11 @@
 #
 #  Características:
 #  - Dimensiones globales configurables
-#  - Junta (grout) entre piezas
+#  - Formatos comerciales de baldosa (30x30, 45x45, 60x60, 60x120 cm)
+#    como tamaño inicial editable
+#  - Junta (grout) entre piezas: plana, elevada o retraída en REGULAR y
+#    OFFSET (los demás patrones solo dejan la separación)
+#  - Losa base opcional debajo de las piezas
 #  - Espesor y bisel de cada pieza
 #  - Borde perimetral (border trim)
 #  - Generación desde curva o contorno manual
@@ -58,9 +62,17 @@ from bpy.props import (
 )
 
 from . import af_material
+from .af_construction_presets import (
+    CUSTOM_PRESET,
+    preset_for_tile_size,
+    tile_preset_dimensions,
+    tile_preset_items,
+)
 from .af_floor_geometry import (
+    GROUT_GEOMETRY_PATTERNS,
     clip_polygon_to_outline,
     fragments_cover_polygon,
+    grout_joint_thickness,
     normalize_outline,
     polygon_area,
     polygon_boundary_edges,
@@ -103,10 +115,14 @@ AF_BORDER_STYLES = [
 ]
 
 AF_GROUT_STYLES = [
-    ('FLAT',   "Flat",   "Flat flush grout"),
-    ('RAISED', "Raised", "Slightly raised grout lines"),
-    ('RECESSED',"Recessed","Recessed / concave grout"),
+    ('FLAT',    "Flat",     "Joint flush with the tile surface"),
+    ('RAISED',  "Raised",   "Joint stands Grout Depth above the tiles"),
+    ('RECESSED',"Recessed", "Joint sits Grout Depth below the tiles"),
 ]
+
+# Commercial tile formats (editable starting sizes, see
+# af_construction_presets.py).
+AF_TILE_PRESETS = tile_preset_items()
 
 
 # ════════════════════════════════════════════════════════════
@@ -157,6 +173,14 @@ class AF_FloorProperties(PropertyGroup):
     )
 
     # ── Dimensiones de la pieza ────────────────────────────────
+    tile_preset : EnumProperty(
+        name        = "Tile Format",
+        description = ("Commercial tile format used as an editable starting "
+                       "size; switches back to Custom when the size is edited"),
+        items       = AF_TILE_PRESETS,
+        default     = CUSTOM_PRESET,
+        update      = lambda s, c: af_floor_tile_preset_update(s, c),
+    )
     tile_width : FloatProperty(
         name        = "Tile Width",
         description = "Width of each tile/plank",
@@ -164,7 +188,7 @@ class AF_FloorProperties(PropertyGroup):
         min         = 0.02,
         max         = 5.0,
         unit        = 'LENGTH',
-        update      = lambda s, c: af_floor_update(s, c),
+        update      = lambda s, c: af_floor_tile_size_update(s, c),
     )
     tile_depth : FloatProperty(
         name        = "Tile Depth",
@@ -173,7 +197,7 @@ class AF_FloorProperties(PropertyGroup):
         min         = 0.02,
         max         = 5.0,
         unit        = 'LENGTH',
-        update      = lambda s, c: af_floor_update(s, c),
+        update      = lambda s, c: af_floor_tile_size_update(s, c),
     )
     tile_thickness : FloatProperty(
         name        = "Tile Thickness",
@@ -461,6 +485,10 @@ class AF_FloorGenerator:
             self.ox = 0.0
             self.oy = 0.0
 
+        # The optional base slab occupies 0..base_thickness; every piece,
+        # joint and border is laid on top of it instead of inside it.
+        self.z_lift = p.base_thickness if p.base_enable else 0.0
+
         self.outline = []
         self._outline_triangles = []
         self._pattern_rotation_active = False
@@ -562,14 +590,22 @@ class AF_FloorGenerator:
             return 0.0
         return self.props.border_width
 
+    def _joint_thickness(self):
+        """Height of the grout prisms for the selected grout style."""
+        p = self.props
+        return grout_joint_thickness(
+            p.grout_style, p.tile_thickness, p.grout_depth)
+
     # ────────────────────────────────────────────────────────
     #  UTILIDADES
     # ────────────────────────────────────────────────────────
-    def _tile(self, x0, y0, tw, td, thick, mi=0, bevel=0.0):
+    def _tile(self, x0, y0, tw, td, thick, mi=0, bevel=0.0, z_base=None):
         """
         Genera una baldosa/pieza en la posición (x0,y0)
         con dimensiones tw×td y espesor thick.
         Si bevel > 0, aplica un bisel en los bordes superiores.
+        Las piezas se apoyan sobre la losa base (z_lift) salvo que se
+        indique un z_base explícito.
         """
         bm  = self.bm
         mat = self._mat
@@ -580,8 +616,8 @@ class AF_FloorGenerator:
         y0 += oy
         x1  = x0 + tw
         y1  = y0 + td
-        z0  = 0.0
-        z1  = thick
+        z0  = self.z_lift if z_base is None else z_base
+        z1  = z0 + thick
 
         if tw < 0.001 or td < 0.001 or thick < 0.001:
             return
@@ -678,8 +714,8 @@ class AF_FloorGenerator:
         oy   = self.oy
         cosa = math.cos(angle)
         sina = math.sin(angle)
-        z0   = 0.0
-        z1   = thick
+        z0   = self.z_lift
+        z1   = z0 + thick
 
         hw = tw * 0.5
         hd = td * 0.5
@@ -735,8 +771,8 @@ class AF_FloorGenerator:
         mat = self._mat
         ox  = self.ox
         oy  = self.oy
-        z0  = 0.0
-        z1  = thick
+        z0  = self.z_lift
+        z1  = z0 + thick
         segs = 6
 
         base_angle = 0.0 if flat_top else math.radians(30)
@@ -776,27 +812,25 @@ class AF_FloorGenerator:
             except Exception:
                 pass
 
-    def _grout_line_h(self, x0, x1, y, gw, gd, mi):
-        """Línea de junta horizontal."""
+    def _grout_line_h(self, x0, x1, y, gw, mi):
+        """Línea de junta horizontal (altura según grout_style)."""
         if gw < 0.0001:
             return
-        p = self.props
         self._tile(
             x0 - self.ox, y - gw * 0.5 - self.oy,
             x1 - x0, gw,
-            gd if gd > 0.001 else p.tile_thickness,
+            self._joint_thickness(),
             mi
         )
 
-    def _grout_line_v(self, y0, y1, x, gw, gd, mi):
-        """Línea de junta vertical."""
+    def _grout_line_v(self, y0, y1, x, gw, mi):
+        """Línea de junta vertical (altura según grout_style)."""
         if gw < 0.0001:
             return
-        p = self.props
         self._tile(
             x - gw * 0.5 - self.ox, y0 - self.oy,
             gw, y1 - y0,
-            gd if gd > 0.001 else p.tile_thickness,
+            self._joint_thickness(),
             mi
         )
 
@@ -811,7 +845,7 @@ class AF_FloorGenerator:
         bt = p.base_thickness
         w  = p.width
         d  = p.depth
-        self._tile(0, 0, w, d, bt, p.mat_base)
+        self._tile(0, 0, w, d, bt, p.mat_base, z_base=0.0)
 
     # ────────────────────────────────────────────────────────
     #  BORDE PERIMETRAL
@@ -894,15 +928,16 @@ class AF_FloorGenerator:
 
                 self._tile(x0, y0, tw_clip, td_clip, tt, mi, bev)
 
-        # — Juntas —
+        # — Juntas — (flush / raised / recessed según grout_style)
         if gw > 0.0001:
+            jt = self._joint_thickness()
             # Horizontales
             for row in range(n_rows):
                 y_grout = y_s + (row + 1) * step_y - gw
                 if y_s <= y_grout <= y_e:
                     self._tile(
                         bw, y_grout, w - bw*2, gw,
-                        max(tt - p.grout_depth, 0.001),
+                        jt,
                         mi_g
                     )
             # Verticales
@@ -911,7 +946,7 @@ class AF_FloorGenerator:
                 if x_s <= x_grout <= x_e:
                     self._tile(
                         x_grout, bw, gw, d - bw*2,
-                        max(tt - p.grout_depth, 0.001),
+                        jt,
                         mi_g
                     )
 
@@ -964,13 +999,13 @@ class AF_FloorGenerator:
                     continue
                 self._tile(x0_c, y0, tw_c, td_c, tt, mi, bev)
 
-        # Juntas
+        # Juntas (flush / raised / recessed según grout_style)
         if gw > 0.0001:
+            jt = self._joint_thickness()
             for row in range(n_rows):
                 yg = y_s + (row + 1) * step_y - gw
                 if y_s <= yg < y_e:
-                    self._tile(bw, yg, w - bw*2, gw,
-                               max(tt - p.grout_depth, 0.001), mi_g)
+                    self._tile(bw, yg, w - bw*2, gw, jt, mi_g)
             for col in range(n_cols + 1):
                 for row in range(n_rows):
                     row_off = (off * step_x) if row % 2 == 1 else 0.0
@@ -978,8 +1013,7 @@ class AF_FloorGenerator:
                     y0 = y_s + row * step_y
                     y1 = min(y0 + td, y_e)
                     if x_s <= xg < x_e and y0 < y_e:
-                        self._tile(xg, y0, gw, y1 - y0,
-                                   max(tt - p.grout_depth, 0.001), mi_g)
+                        self._tile(xg, y0, gw, y1 - y0, jt, mi_g)
 
     # ────────────────────────────────────────────────────────
     #  PATTERN: HERRINGBONE
@@ -1466,6 +1500,34 @@ def af_floor_update(self, context):
     _rebuild_floor_mesh(obj, props)
 
 
+def af_floor_tile_preset_update(self, context):
+    """Apply a commercial tile format as the new (editable) tile size."""
+    global _FLOOR_UPDATE_SUSPENDED
+    dims = tile_preset_dimensions(self.tile_preset)
+    if dims is None:
+        # CUSTOM keeps whatever size the user typed.
+        return
+    previous_suspend = _FLOOR_UPDATE_SUSPENDED
+    _FLOOR_UPDATE_SUSPENDED = True
+    try:
+        self.tile_width, self.tile_depth = dims
+    finally:
+        _FLOOR_UPDATE_SUSPENDED = previous_suspend
+    af_floor_update(self, context)
+
+
+def af_floor_tile_size_update(self, context):
+    """Manual size edits fall back to Custom once they leave the preset."""
+    if _FLOOR_UPDATE_SUSPENDED:
+        return
+    expected = preset_for_tile_size(
+        self.tile_preset, self.tile_width, self.tile_depth)
+    if expected != self.tile_preset:
+        # Assigning CUSTOM does not rebuild (no dimensions to apply).
+        self.tile_preset = expected
+    af_floor_update(self, context)
+
+
 def _rebuild_floor_mesh(obj, props):
     gen = AF_FloorGenerator(props)
     bm  = gen.generate()
@@ -1571,12 +1633,22 @@ class ARCHIFORGE_OT_floor(Operator):
     depth : FloatProperty(
         name="Depth", default=3.0, min=0.1, unit='LENGTH',
     )
+    tile_preset : EnumProperty(
+        name="Tile Format", items=AF_TILE_PRESETS, default=CUSTOM_PRESET,
+        description="Commercial tile format (editable afterwards)",
+    )
     tile_width : FloatProperty(
         name="Tile Width", default=0.60, min=0.02, unit='LENGTH',
     )
     tile_depth : FloatProperty(
         name="Tile Depth", default=0.60, min=0.02, unit='LENGTH',
     )
+
+    def _tile_size(self):
+        dims = tile_preset_dimensions(self.tile_preset)
+        if dims is None:
+            return self.tile_width, self.tile_depth
+        return dims
 
     def invoke(self, context, event):
         return context.window_manager.invoke_props_dialog(self)
@@ -1591,12 +1663,16 @@ class ARCHIFORGE_OT_floor(Operator):
         col.prop(self, "width")
         col.prop(self, "depth")
         col.separator()
-        col.prop(self, "tile_width")
-        col.prop(self, "tile_depth")
+        col.prop(self, "tile_preset")
+        size = col.column(align=True)
+        size.enabled = self.tile_preset == CUSTOM_PRESET
+        size.prop(self, "tile_width")
+        size.prop(self, "tile_depth")
 
         # Info — número aprox de piezas
-        n_x = max(1, int(self.width / self.tile_width))
-        n_y = max(1, int(self.depth / self.tile_depth))
+        tile_w, tile_d = self._tile_size()
+        n_x = max(1, int(self.width / max(tile_w, 0.01)))
+        n_y = max(1, int(self.depth / max(tile_d, 0.01)))
         col.separator()
         col.label(
             text=f"≈ {n_x * n_y} tiles ({n_x}×{n_y})",
@@ -1606,11 +1682,13 @@ class ARCHIFORGE_OT_floor(Operator):
     def execute(self, context):
         bpy.ops.object.select_all(action='DESELECT')
         obj, props = _create_floor_object(context, "AF_Floor")
+        tile_w, tile_d = self._tile_size()
         props.pattern    = self.pattern
         props.width      = self.width
         props.depth      = self.depth
-        props.tile_width = self.tile_width
-        props.tile_depth = self.tile_depth
+        props.tile_width = tile_w
+        props.tile_depth = tile_d
+        props.tile_preset = self.tile_preset
         _rebuild_floor_mesh(obj, props)
         self.report({'INFO'}, f"Floor created: {obj.name}")
         return {'FINISHED'}
@@ -1882,6 +1960,7 @@ class ARCHIFORGE_PT_floor(Panel):
         box = layout.box()
         col = box.column(align=True)
         col.label(text="Tile / Piece", icon='MESH_PLANE')
+        col.prop(props, "tile_preset", text="Format")
         col.prop(props, "tile_width")
         col.prop(props, "tile_depth")
         col.prop(props, "tile_thickness")
@@ -1942,6 +2021,12 @@ class ARCHIFORGE_PT_floor(Panel):
         col.prop(props, "grout_style")
         col.prop(props, "grout_width")
         col.prop(props, "grout_depth")
+        if props.pattern not in GROUT_GEOMETRY_PATTERNS:
+            col.label(
+                text="Joint prisms only in Regular / Offset; "
+                     "this pattern leaves a gap",
+                icon='INFO',
+            )
 
         # ── Offset / Rotación ─────────────────────────────────
         box = layout.box()

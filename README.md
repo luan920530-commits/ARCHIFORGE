@@ -3,7 +3,7 @@
 **Modelado arquitectónico paramétrico para Blender 3.3 LTS y posteriores**
 
 [![Blender](https://img.shields.io/badge/Blender-3.3_LTS-orange)](https://www.blender.org)
-[![Version](https://img.shields.io/badge/version-1.9.0-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.10.0-blue)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-GPLv3-green)](LICENSE)
 
 ArchiForge genera muros, losas, techos, puertas, ventanas, escaleras, baños,
@@ -87,6 +87,34 @@ como un solo objeto paramétrico para mover y dimensionar en conjunto. Las
 medidas son presets de referencia, no fichas de fabricante ni garantía de
 cumplimiento normativo.
 
+## 🪟 Ventanas abatibles, formatos de piso y referencias de muro (nuevo en v1.10)
+
+Las ventanas **Casement** (abatibles) y **Awning** (proyectantes) abren de
+verdad: **Open Angle** gira cada hoja completa —marco de hoja, vidrio y
+divisiones— alrededor de su eje de bisagra. En las abatibles se elige **Hinge**
+(izquierda/derecha; con varias hojas se alternan para que los cantos libres se
+encuentren) y **Swing** (hacia fuera o hacia dentro); las proyectantes giran
+desde el cabezal y se proyectan hacia el exterior. El botón **Toggle
+Open / Closed** solo aparece para estos dos tipos; las ventanas fijas,
+corredizas, de guillotina y de arco ignoran el ángulo. Si **Hinges** está
+activo, los pernios se generan centrados sobre el mismo eje de giro.
+
+En **Floor Properties**, **Tile Format** ofrece los formatos comerciales
+**30 × 30, 45 × 45, 60 × 60 y 60 × 120 cm**; al elegir uno se cargan las
+medidas y siguen siendo editables (cualquier cambio manual vuelve a *Custom*).
+Los estilos de junta **Flat / Raised / Recessed** generan geometría distinta en
+los patrones **Regular** y **Offset**: la junta queda a ras, sobresale o se
+hunde la profundidad indicada en **Grout Depth**; los demás patrones no
+modelan prismas de junta. La **losa base** se construye debajo de las piezas,
+no superpuesta a ellas.
+
+En **Wall Properties**, **Construction Reference** fija el espesor inicial para
+**entramado de madera (11.5 cm), ladrillo (15 cm), concreto (25 cm) y bloque
+estructural (20 cm)**, también disponible al crear o dibujar muros. Son valores
+de referencia editables, no exigencias normativas: el muro sigue siendo un solo
+sólido sin aparejo ni capas, y al modificar el espesor a mano la referencia
+pasa a *Custom*.
+
 ---
 
 ## 🎨 Iconos propios
@@ -103,9 +131,9 @@ las instrucciones para editar o regenerar los iconos están en [`icons/README.md
 
 | Módulo | Contenido |
 |---|---|
-| 🧱 Muros / Losas | Muros paramétricos + **Draw Wall / Room**; **Draw Slab / Draw Floor** para contornos cerrados; losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK**, pisos recortados al polígono, desde curva y huecos |
+| 🧱 Muros / Losas | Muros paramétricos + **Draw Wall / Room** con **referencias de espesor** (madera, ladrillo, concreto, bloque); **Draw Slab / Draw Floor** para contornos cerrados; losas: **MACIZA · ALIGERADA · PLACA FÁCIL · STEELDECK**, pisos recortados al polígono, desde curva y huecos |
 | 🏠 Techos (v1.1) | Gable, Shed, Hip, Saltbox, Butterfly, Mansard, Bóveda + **9 cubiertas**: zinc, eternit, termoacústica, metálica, española, romana, plana, tejuela |
-| 🚪 Puertas / Ventanas (v1.1) | Presets CO: puertas 0.70–1.20 m, ventanas 1.00×1.00 → 2.40×2.20 + antepecho; modos Draw y Place |
+| 🚪 Puertas / Ventanas (v1.1) | Presets CO: puertas 0.70–1.20 m, ventanas 1.00×1.00 → 2.40×2.20 + antepecho; modos Draw y Place; **abatibles y proyectantes con hoja, vidrio y divisiones que giran sobre la bisagra** (v1.10) |
 | 🪜 Escaleras | Clásicas (presets) + nuevas: recta, en L, caracol y **rampa 8%** |
 | 🏗️ Estructura+ | Zapatas, columnas, vigas, losa aligerada, ejes/rejilla y niveles con rótulos |
 | 🛁 Baño (v2) | Sanitarios y aparatos; vanities, torre de linos, espejo-gabinete y sets de toalleros, nichos, organizadores, tapetes y seguridad |
@@ -115,7 +143,7 @@ las instrucciones para editar o regenerar los iconos están en [`icons/README.md
 | 🌿 Exterior | Patio, bistró, picnic, pérgolas, baúles, jardineras, huerta, enrejados, parrilla, fogón, fuente e iluminación |
 | 🪴 Decoración | Materas con plantas, lámparas, floreros, cuadros, reloj, libros, TV, tapete y sets decorativos por ambiente |
 | 🗂️ Room Asset Library (v1.8) | **100 objetos o sets**: 20 opciones paramétricas para dormitorio, sala, cocina, baño y solar/jardín |
-| 🚧 Extras | Cerchas (truss), cercas, pisos/patterns, booleanas automáticas |
+| 🚧 Extras | Cerchas (truss), cercas, pisos/patterns con **formatos 30×30 · 45×45 · 60×60 · 60×120 cm** y juntas a ras / resaltadas / rehundidas, booleanas automáticas |
 | 📊 Cantidades | **Exportación CSV (Excel)** de cantidades del proyecto |
 
 **Pack Colombia 🇨🇴**: tomas con GFCI, ducha eléctrica tipo Lorenzetti,
@@ -195,21 +223,23 @@ cambio aplica a todos los objetos que lo usan.
 
 ```
 ArchiForge/
-├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.8.0)
+├── __init__.py          # Registro, panel lateral, menú Shift+A (v1.10.0)
 ├── af_control_center.py # Ventana flotante lanzadora (v1.0)
 ├── af_material.py       # Gestión de materiales AF.*
 ├── af_objects_base.py   # Constructor base (AF_ObjectBuilder)
 ├── af_room_assets_catalog.py # Catálogo puro de 100 presets por ambiente
 ├── af_room_assets.py        # Generador paramétrico de muebles y sets
 ├── af_wall_path.py      # Geometría y validación pura de trazos de muro
-├── af_floor_geometry.py # Triangulación y recorte poligonal puro (testeable)
+├── af_floor_geometry.py # Triangulación, recorte poligonal y alturas de junta (puro)
+├── af_window_geometry.py # Cinemática pura de hojas abatibles/proyectantes y bisagras
+├── af_construction_presets.py # Formatos de baldosa y espesores de muro de referencia (puro)
 ├── af_outline_draw.py   # Interacción modal común de contornos cerrados
-├── af_wall.py           # Muros paramétricos y herramienta Draw Wall / Room
+├── af_wall.py           # Muros paramétricos, referencias de espesor y Draw Wall / Room
 ├── af_slab.py           # Losas: 4 sistemas + Draw Slab Outline
-├── af_floor.py          # Patrones de piso + contornos poligonales
+├── af_floor.py          # Patrones de piso, formatos de baldosa, juntas y contornos
 ├── af_roof.py           # Techos + 9 cubiertas (v1.1)
 ├── af_door.py           # Puertas + presets CO (v1.1)
-├── af_window.py         # Ventanas + presets CO (v1.1)
+├── af_window.py         # Ventanas + presets CO; hojas abatibles/proyectantes (v1.10)
 ├── af_stairs.py         # Escaleras nuevas + rampa
 ├── af_structure.py      # Estructura+ (v1.0)
 ├── af_bathroom.py       # Baño v2 + ducha eléctrica CO
@@ -221,13 +251,15 @@ ArchiForge/
 ├── af_quantities.py     # Integración de exportación CSV con Blender
 ├── af_quantities_io.py  # Cálculos/CSV puros, testeables sin Blender
 ├── icons/               # 24 iconos PNG originales + fuente de regeneración
-└── tests/               # Regresiones y comprobaciones estáticas
+└── tests/               # Regresiones, comprobaciones estáticas y stub headless de bpy
 ```
 
 ## 📝 Versiones
 
 Ver [CHANGELOG.md](CHANGELOG.md) para el detalle completo.
 
+- **v1.10.0** — Ventanas abatibles/proyectantes que giran hoja, vidrio y divisiones; formatos de baldosa 30×30 → 60×120; juntas a ras/resaltadas/rehundidas; referencias de espesor de muro
+- **v1.9.0** — Selector de idioma English/Español y corrección de la manija de puertas con bisagra derecha
 - **v1.8.0** — Biblioteca paramétrica de 100 objetos/sets para dormitorio, sala, cocina, baño y solar/jardín
 - **v1.7.0** — Dibujo de contornos de losa/piso, recorte poligonal y ciclo de booleanos paramétricos
 - **v1.6.0** — Dibujo de muros conectados y recintos cerrados con esquinas automáticas
@@ -262,9 +294,14 @@ python -m unittest discover -s tests -v
 ```
 
 Comprueba sintaxis compatible con Python 3.10, unicidad de identificadores
-Blender, cantidades/CSV, triangulación y recorte poligonal, además del flujo de
-creación/actualización de booleanos. La geometría de BMesh y la interacción
-modal deben validarse además dentro de Blender; CI no sustituye esa prueba.
+Blender, cantidades/CSV, triangulación y recorte poligonal, el catálogo de
+presets de muro/baldosa y el flujo de creación/actualización de booleanos.
+`tests/blender_stub.py` sustituye `bpy`/`bmesh`/`mathutils` por contenedores
+mínimos para ejecutar los generadores reales de ventanas y pisos y verificar
+sus coordenadas (hojas giradas con vidrio y divisiones, pernios sobre el eje,
+alturas de junta y losa base). La interacción modal, los materiales y el
+resto de la geometría deben validarse además dentro de Blender; CI no
+sustituye esa prueba.
 
 ## 🛣️ Roadmap
 
