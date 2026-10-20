@@ -577,8 +577,11 @@ def _tune_struct_materials():
                 inp["Metallic"].default_value = metallic
             if rough is not None and "Roughness" in inp:
                 inp["Roughness"].default_value = rough
-            if emission is not None and "Emission" in inp:
-                inp["Emission"].default_value = emission
+            # "Emission" se llama "Emission Color" desde Blender 4.0.
+            for _name in ("Emission", "Emission Color"):
+                if emission is not None and _name in inp:
+                    inp[_name].default_value = emission
+                    break
             if (emission_strength is not None
                     and "Emission Strength" in inp):
                 inp["Emission Strength"].default_value = \

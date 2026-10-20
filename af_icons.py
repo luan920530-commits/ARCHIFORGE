@@ -131,7 +131,9 @@ OBJECT_ICONS = {
 
 
 def _package_module():
-    name = (__package__ or "").split(".")[0]
+    """The add-on package (``ArchiForge`` as legacy add-on,
+    ``bl_ext.<repo>.archiforge`` as Blender 4.2+ extension)."""
+    name = __package__ or ""
     return sys.modules.get(name) if name else None
 
 

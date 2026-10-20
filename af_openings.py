@@ -667,8 +667,12 @@ def _tune_opening_materials():
                 inp["Metallic"].default_value = metallic
             if rough is not None and "Roughness" in inp:
                 inp["Roughness"].default_value = rough
-            if transmission is not None and "Transmission" in inp:
-                inp["Transmission"].default_value = transmission
+            # "Transmission"/"Emission" se llaman "Transmission Weight"/
+            # "Emission Color" desde Blender 4.0: probar ambos nombres.
+            for _name in ("Transmission", "Transmission Weight"):
+                if transmission is not None and _name in inp:
+                    inp[_name].default_value = transmission
+                    break
         except Exception:
             pass
 
